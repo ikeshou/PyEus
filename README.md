@@ -4,14 +4,14 @@ Python library that builds Foreign Function Interface between [Python](https://w
 <br>
 
 
-## Author
+## :black_nib: Author
 Ikezaki Shoya <ikezaki@csg.ci.i.u-tokyo.ac.jp>
 
-## Platform
+## :computer: Platform
 PyEus supports Linux only.  
 Though you can probably use PyEus library on your Mac OS X, it is not supported.
   
-## :heavy_exclamation_mark:Caution:heavy_exclamation_mark:
+## :warning: Caution
 Since the library of this version is an experimental one, please be sure that the whole architecture of the library might be changed.  
 Moreover, the way of bootstrapping has not yet refined :)  
 If you just want to see how it works or just want to try my library, please move on to the next step!
@@ -85,7 +85,8 @@ Running the code above is as same as running the following code in Euslisp.
 (robop::func 1 10 100 :param 1000 :name "py")
 ```
 As a result, the `n` will be 1111 (Python built-in object "integer").
-
+<br>  
+<br>
 
 ### 2. Using (more and more) data types 
 
