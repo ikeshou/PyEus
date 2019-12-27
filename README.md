@@ -6,11 +6,13 @@ Python library that builds Foreign Function Interface between [Python](https://w
 
 ## :black_nib: Author
 Ikezaki Shoya <ikezaki@csg.ci.i.u-tokyo.ac.jp>
+<br>
 
 ## :computer: Platform
 PyEus supports Linux only.  
 Though you can probably use PyEus library on your Mac OS X, it is not supported.
-  
+<br>
+
 ## :warning: Caution
 Since the library of this version is an experimental one, please be sure that the whole architecture of the library might be changed.  
 Moreover, the way of bootstrapping has not yet refined :)  
