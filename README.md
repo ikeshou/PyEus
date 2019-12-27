@@ -5,16 +5,13 @@ Python library that builds Foreign Function Interface between [Python](https://w
 
 
 ## :black_nib: Author
-***
 Ikezaki Shoya <ikezaki@csg.ci.i.u-tokyo.ac.jp>
 
 ## :computer: Platform
-***
 PyEus supports Linux only.  
 Though you can probably use PyEus library on your Mac OS X, it is not supported.
   
 ## :warning: Caution
-***
 Since the library of this version is an experimental one, please be sure that the whole architecture of the library might be changed.  
 Moreover, the way of bootstrapping has not yet refined :)  
 If you just want to see how it works or just want to try my library, please move on to the next step!
@@ -199,7 +196,6 @@ print(arr.to_python)    # [[100, None], [None, None]] (the 0-0 elment is changed
 <br>
 
 ### 3. Using classes  
-
 You can access the user-defined class and built-in class in the same way.  
 ```python
 iv = robop.instantiate(robop.integer_vector, 4)    # integer-vector is the built-in class in Euslisp
@@ -210,14 +206,12 @@ iv.to_python()    # [0,0,0,0]
 
 
 ## 4. Using callback functions
-***
 (now writing)
 <br>
 <br>
 
 
 ## 5. (Cool) type description interface
-***
 (now writing)
 <br>
 <br>
