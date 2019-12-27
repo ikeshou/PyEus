@@ -8,9 +8,7 @@ You can use all functions inside the library just to put 'import pyeus' at the b
 
 import os, sys
 import pyeus
-from pyeus import EusSym, EusFuncSym, EusCons, EusList, EusPlist, EusArray, EusVec, EusIntVec, EusFloatVec, EusBitVec, EusPath
 from pyeus import my_assert
-from pyeus import close_all_sockets, kill_eus_process
 
 
 def mainloop():
@@ -35,7 +33,11 @@ def mainloop():
         # eus_pack = pyeus.make_eus_instance(pkg="test")    # 混乱するので非推奨だが一応動くようにしてあげている
         
         # ----test0----
+        print("\n")
+        print("-"*28)
         print("# test0 -> instance variables of Eus_pkg")
+        print("-"*28)
+
         my_assert(eus_pack._pkg, "TEST")
         my_assert(eus_pack._option, "underscore")
         my_assert(pyeus.eus_package_table.has_key("TEST"), True)
@@ -45,14 +47,20 @@ def mainloop():
 
         # ----test1----
         # グローバル変数にアクセス
+        print("-"*28)
         print("# test1 -> global variables in Euslisp")
+        print("-"*28)
+
         my_assert(eus_pack._my_global_str_.to_python(), 'this is my global variable')
         my_assert(eus_pack.const_pi, 3.1415)
 
 
         # ----test2----
         # ユーザー定義関数にアクセス
+        print("-"*28)
         print("# test2 -> user-defined functions in Euslisp")
+        print("-"*28)
+
         # 引数なし
         my_assert(eus_pack.no_arg_ret_nil(), None)
         my_assert(eus_pack.no_arg_ret_int(), 1)
@@ -109,7 +117,10 @@ def mainloop():
 
         # ----test3----
         # 組み込み関数にアクセス
+        print("-"*28)
         print("# test3 -> built-in functions in Euslisp")
+        print("-"*28)
+
         # 引数なし
         eus_system = pyeus.make_eus_instance(pkg="'system")
         my_assert(type(eus_system.list_all_classes().to_python()), list)     # systemパッケージに入っている
@@ -127,16 +138,23 @@ def mainloop():
         # func_接頭語がついたものは常に登録されていることの確認
         my_assert(eus_pack.func_reverse([1,2,3]).to_python(), [3,2,1])
 
+        # func. によるアクセスについても確認
+        my_assert(eus_pack.func.reverse([1,2,3]).to_python(), [3,2,1])
+
         # 関数名とシンボル名がかぶっているものは、python側ではfunc_接頭語がついたものしか関数として登録されていないことの確認
         my_assert(eus_pack.func_integer_vector(10,20,30).to_python(), [10,20,30])
         try:
             eus_pack.integer_vector(10,20,30).to_python()
-        except TypeError:    # func_がないとEus_proxyのinteger_vectorとして処理される。Eus_proxyのコンストラクタに複数引数を与えようとするのでtype errorとなる。(1つだとここではじかれないのがなんともいえぬ)
-            pass
+        except Exception as e:    # func_がないとEus_proxyのinteger_vectorとして処理される。Eus_proxyのコンストラクタに複数引数を与えようとするのでtype errorとなる。(1つだとここではじかれないのがなんともいえぬ)
+            my_assert(type(e), TypeError)
+
 
         # ----test4----
         # ユーザー定義クラスにアクセス
+        print("-"*28)
         print("# test4 -> user-defined class in Euslisp")
+        print("-"*28)
+
         # しっかりプロキシクラスが作成されているか
         my_assert(type(eus_pack.person), type)
         
@@ -157,7 +175,9 @@ def mainloop():
 
         # ----test5----
         # 組み込みクラスにアクセス
+        print("-"*28)
         print("# test5 -> built-in class in Euslisp")
+        print("-"*28)
         eus_pack.instantiate(eus_pack.integer_vector, 4)
         my_assert(eus_pack.instantiate(eus_pack.integer_vector, 4).to_python(), [0,0,0,0])
         my_assert(eus_pack.subclassp(eus_system.integer_vector, eus_system.vector), True)
@@ -168,52 +188,124 @@ def mainloop():
 
         # ----test6----
         # 明示的な型変換が必要な関数アクセスのテスト
-        # 引数coordinates, line, plane, surronding-box, streo-viewing? これらは普通に関数呼び出しで作成すればよい。euslispの方でもリテラル表記がないのでそれで充分。
+        print("-"*28)
         print("# test6 -> explicit type conversion")
+        print("-"*28)
+
+        # そもそも型変換後のオブジェクトが正しい挙動をするか
+        my_assert(eus_pack.EusSym("a").to_python(), "test::a")    # 'TEST::aを作れという形で文字列を送るが、evalするとtest::aという出力形式になる。パッケージ名は小文字で表示される。
+        my_assert(eus_pack.EusFuncSym("cons").to_python().startswith("#<compiled-code"), True)
+        my_assert(eus_pack.EusStr("moo").to_python(), "moo")
+        my_assert(eus_pack.EusHash({'a':1}).to_python(), {'a':1})
+        my_assert(eus_pack.EusCons([0,0,0]).to_python(), [0,0,0])
+        my_assert(eus_pack.EusList([10, [100], [[1000]]]).to_python(), [10, [100], [[1000]]])
+        my_assert(eus_pack.EusPlist([['a', 1], ['b', 2], ['c', 3]]).to_python(), [['a', 1], ['b', 2], ['c', 3]])
+        my_assert(eus_pack.EusArray([1, 2, 3, 4, 5]).to_python(), [1, 2, 3, 4, 5])
+        my_assert(eus_pack.EusVec(('a', 'b')).to_python(), ['a', 'b'])
+        my_assert(eus_pack.EusIntVec([1, 2, 3, 4]).to_python(), [1, 2, 3, 4])
+        my_assert(eus_pack.EusFloatVec([1.0, 2.0, 3.0]).to_python(), [1.0, 2.0, 3.0])
+        my_assert(eus_pack.EusBitVec([1, 1, 0, 0]).to_python(),[1, 1, 0, 0])
+        my_assert(eus_pack.EusPath("/bin/").to_python(), "/bin/")
+
+        # デフォルト値があるものに関しては、そのデフォルト値が正しく動作するか
+        my_assert(eus_pack.EusStr().to_python(), "")
+        my_assert(eus_pack.EusHash().to_python(), {})
+        my_assert(eus_pack.EusCons(), None)    # () => nilよりこれが仕様
+        my_assert(eus_pack.EusList(), None)
+        my_assert(eus_pack.EusPlist().to_python(), [[None]])    # ((nil . nil)) => ((nil))よりこれが仕様。
+        my_assert(eus_pack.EusArray().to_python(), [])
+        my_assert(eus_pack.EusVec().to_python(), [])
+        my_assert(eus_pack.EusIntVec().to_python(), [])
+        my_assert(eus_pack.EusFloatVec().to_python(), [])
+        my_assert(eus_pack.EusBitVec().to_python(), [])
+        my_assert(eus_pack.EusPath().to_python(), "/")    
+
 
         # 引数symbol (str to symbol)
-        my_assert(eus_pack.access_symbol(EusSym("TEST::const-pi")), 3.1415)
+        my_assert(eus_pack.access_symbol(eus_pack.EusSym("const-pi")), 3.1415)    # 'const-piが関数に渡されevalされたものが返される。
         
         # 引数function symbol (str to symbol)
-        my_assert(eus_pack.sort([-2,-5,11,7,3,-13], EusFuncSym("<"), key=EusFuncSym("abs")).to_python(), [-2,3,-5,7,11,-13])
+        my_assert(eus_pack.sort([-2,-5,11,7,3,-13], eus_pack.EusFuncSym("<="), eus_pack.EusFuncSym("abs")).to_python(), [-2,3,-5,7,11,-13])
 
         # 引数cons (list/tuple to cons)
         # 2.7ではrangeはlistを返す。xrangeがrangeオブジェクトを返すがこいつはスライスなどを受け付けず限定的な処理しか許されない。3.7からはサポートしても良いかも。
-        my_assert(eus_pack.dot_cons_p(EusCons([1, 2, 3])), True)
+        my_assert(eus_pack.dot_cons_p(eus_pack.EusCons([1, 2, 3])), True)
 
         # 引数list (list/tuple to list)
         tmp = 1
-        my_assert(eus_pack.list_arg_ret_doubled_list(EusList([tmp, 2 ,3])).to_python(), [2, 4, 6])
+        my_assert(eus_pack.list_arg_ret_doubled_list(eus_pack.EusList([tmp, 2 ,3])).to_python(), [2, 4, 6])
 
         # 引数plist (2*n-list/2*n-tuple to plist)
         p_object = eus_pack.instantiate(eus_pack.propertied_object)
-        p_object.plist(EusPlist([[10, 100], [20, 200], [30, 300]]))
+        p_object.plist(eus_pack.EusPlist([[10, 100], [20, 200], [30, 300]]))
         my_assert(p_object.get(20), 200)
 
         # 引数array (list/tuple to array)
-        my_assert(eus_pack._d_array_arg_ret_0_0(EusArray([[4, 3], [2, 1]])), 4)
+        my_assert(eus_pack._d_array_arg_ret_0_0(eus_pack.EusArray([[4, 3], [2, 1]])), 4)
 
         # 引数vector (list/tuple to array)
-        my_assert(eus_pack.vector_arg_ret_0(EusVec([['a', 'b'], ['c', 'd']])).to_python(), ["a", "b"])
+        my_assert(eus_pack.vector_arg_ret_0(eus_pack.EusVec([['a', 'b'], ['c', 'd']])).to_python(), ["a", "b"])
 
         # 引数int-vector (list/tuple to integer vector)
-        my_assert(eus_pack.int_vec_arg_ret_0(EusIntVec([1, 2, 3, 4])), 1)
-        my_assert(eus_pack.int_vec_arg_ret_0(EusFloatVec([1.0, 2.0, 3.0, 4.0])), None)
+        my_assert(eus_pack.int_vec_arg_ret_0(eus_pack.EusIntVec([1, 2, 3, 4])), 1)
+        my_assert(eus_pack.int_vec_arg_ret_0(eus_pack.EusFloatVec([1.0, 2.0, 3.0, 4.0])), None)
 
         # 引数float-vector (list/tuple to float vector)
-        my_assert(eus_pack.float_vec_arg_ret_0(EusFloatVec([1.0, 2.0, 3.0, 4.0])), 1.0)
-        my_assert(eus_pack.float_vec_arg_ret_0(EusIntVec([1, 2, 3, 4])), None)
+        my_assert(eus_pack.float_vec_arg_ret_0(eus_pack.EusFloatVec([1.0, 2.0, 3.0, 4.0])), 1.0)
+        my_assert(eus_pack.float_vec_arg_ret_0(eus_pack.EusIntVec([1, 2, 3, 4])), None)
 
         # 引数bit-vector (0-1-list/0-1-tuple to bit-vector)
-        my_assert(eus_pack.bit_vec_arg_ret_0(EusBitVec([1, 0, 0, 0])), 1)
+        my_assert(eus_pack.bit_vec_arg_ret_0(eus_pack.EusBitVec([1, 0, 0, 0])), 1)
 
         # 引数pathname (str to pathname) 
         # 3.4からはpathlibにPathがあるのでそちらもサポートしてもよいかも
-        my_assert(eus_pack.pathname_arg_ret_file_str(EusPath("/opt/ros/melodic/env.sh")).to_python(), "ENV")
+        my_assert(eus_pack.pathname_arg_ret_file_str(eus_pack.EusPath("/opt/ros/melodic/env.sh")).to_python(), "env")
+
+
+        # しっかり破壊的な操作をするEuslisp関数を呼んだ時プロキシオブジェクトが変更されているか(copyになっていないか)
+        L = eus_pack.EusList([1,2,3,4])
+        eus_pack.nreverse(L)
+        my_assert(L.to_python(), [4,3,2,1])
+
+
+        # ----test7----
+        # set_params関数のテスト
+        print("-"*28)
+        print("# test7 -> set_params function")
+        print("-"*28)
+
+        my_assert(eus_pack.bit_vec_arg_ret_0([1,0,0,1]), None)    # '(1 0 0 1)が送られてくるが、bit-vector-pで弾かれるのでnilが返り、Pythonに返される際Noneとなる
+        eus_pack.set_params("bit_vec_arg_ret_0", eus_pack.EusBitVec)
+        my_assert(eus_pack.bit_vec_arg_ret_0([1,0,0,1]), 1)    # 適切に変換されていれば#*1001がEuslisp側で作られそれに対するlookup-registered-objectが送られる
+        
+        # 引数がすでにproxyになっていた場合は変換しないようになっているか
+        my_assert(eus_pack.bit_vec_arg_ret_0(eus_pack.EusBitVec([1,0,0,0])), 1)
+
+        # 関数名を間違えいたときにエラーを正しくだすか
+        try:
+            eus_pack.set_params("bit-vec-arg-ret-0", eus_pack.EusBitVec)
+        except Exception as e:
+            my_assert(type(e), NameError)
+
+        # コンストラクタではなくなぞの関数を指定しているときにエラーを正しくだすか
+        try:
+            eus_pack.set_params("bit_vec_arg_ret_0", lambda x: list(x))
+        except Exception as e:
+            my_assert(type(e), TypeError)
+        
+
+        # ----test8----
+        # callback functionのテスト
+        print("-"*28)
+        print("# test8 -> callback function")
+        print("-"*28)
+        my_assert(eus_pack.mapcar(lambda x: eus_pack.second(x), [[1,2,3], [4,5,6], [7,8,9]]).to_python(), [2,5,8])
+
 
 
     except Exception:
         err_value = sys.exc_info()[1]
+        print("Runtime error occurred! stopped the integration test.")
         print >> sys.stderr, err_value    
 
     finally:
@@ -221,12 +313,42 @@ def mainloop():
         print("*" * 16)
         print("total passed: {}".format(my_assert.count_passed))
         print("total error: {}".format(my_assert.count_error))
+        if my_assert.count_error:
+            print("error occurred in test {}".format(str(my_assert.error_list)))
         print("*" * 16)
         print("\n")
-        print("--python code--")
-        close_all_sockets()
-        kill_eus_process()
 
+        # Pythonで生成したプロキシクラスの名前をチェック(document用) 
+        # print(type(eus_pack.EusSym("hoge")))
+        # print(type(eus_pack.EusFuncSym("cons")))
+        # print(type(eus_pack.EusStr("hoge")))
+        # print(type(eus_pack.EusCons([1,2,3])))
+        # print(type(eus_pack.EusPlist([['a', 1], ['b', 2]])))
+        # print(type(eus_pack.EusList([1,2,3])))
+        # print(type(eus_pack.EusIntVec([1,2,3])))
+        # print(type(eus_pack.EusFloatVec([1.0, 2.0, 3.0])))
+        # print(type(eus_pack.EusBitVec([1,1,0])))
+        # print(type(eus_pack.EusVec([1,2,3])))
+        # print(type(eus_pack.EusArray([1,2,3])))
+        # print(type(eus_pack.EusHash({'a':1, 'b':2})))
+        # print(type(eus_pack.EusPath("/opt/")))
+
+
+
+
+        import pyeus
+        # same as (mapcar #'(lambda (x) (* x x)) '(1 2 3 4 5))
+        # callback-function is also supported!
+        result = eus_pack.mapcar(lambda x: x**2, [1,2,3,4,5])
+        print(result.to_python())    #  [1,4,9,16,25]
+
+
+
+
+
+        
+        print("--python code--")
+        
 
 
 if __name__ == "__main__":

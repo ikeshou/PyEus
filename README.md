@@ -5,13 +5,16 @@ Python library that builds Foreign Function Interface between [Python](https://w
 
 
 ## :black_nib: Author
+***
 Ikezaki Shoya <ikezaki@csg.ci.i.u-tokyo.ac.jp>
 
 ## :computer: Platform
+***
 PyEus supports Linux only.  
 Though you can probably use PyEus library on your Mac OS X, it is not supported.
   
 ## :warning: Caution
+***
 Since the library of this version is an experimental one, please be sure that the whole architecture of the library might be changed.  
 Moreover, the way of bootstrapping has not yet refined :)  
 If you just want to see how it works or just want to try my library, please move on to the next step!
@@ -20,22 +23,24 @@ If you just want to see how it works or just want to try my library, please move
 
 
 ## Getting started
+***
 1. clone this package
 ```
 git clone https://github.com/ikeshou/PyEus.git
 ```
 
-2. place pyeus.py and eus_server.l inside the same directory that your main python program is placed.
+2. place `pyeus.py` and `eus_server.l` inside the same directory that your main python program is placed.
 
-3. You can call euslisp functions from your python program after `import pyeus` library!
+3. You can call euslisp functions from your python program after `import pyeus` !
 ```python
 # Python user code
-
 import pyeus
+
 # some codes here
 ```
   
 ## Tutorial
+***
 ### 1. Using variables and functions  
 
 Suppose that you want to use `originalVariable` and `my-awesome-eus-function` in the "ROBOP" package written in Euslisp from Python.  
@@ -55,6 +60,7 @@ The keyword notation or quote notation or uppercase string notation is allowed a
 robop = pyeus.make_eus_instance(pkg=":robop")
 ```
 <br>
+
 Now that you can use any Euslisp variables/functions/classes as you want! (Of course, you can use Euslisp built-in variables/functions/classes.) You can call Euslisp functions mostly as same as you use fucntions in a Python module.    
 Before moving on to the precise explanation, please remember there are some rules:  
 
@@ -70,15 +76,15 @@ result = robop.my_awesome_eus_function(*args, **kwargs)
 - Importantly, symbols that is passed as an argument is evaluated as a **Python object**.  
 For example,  
 ```lisp
-;; suppose you want to use a　~~strange~~ Euslisp function below
+;; suppose you want to use a ~~strange~~ Euslisp function below
 (defun complicated~func (num1, num2, num3, &key param s)
   (if (string= s "py")
       (+ num1 num2 num3 param)))
 ```
 ```python
 # Python user code
-a, b = 1, 10    #　of course, this is python onject
-n = robop.complicated_func(a, b, 100, param=1000, name="py")    #　a and b are evaluated in Python!
+a, b = 1, 10    # of course, these are python onject
+n = robop.complicated_func(a, b, 100, param=1000, name="py")    # a and b are evaluated in Python!
 ``` 
 Running the code above is as same as running the following code in Euslisp.  
 ```lisp
@@ -91,37 +97,37 @@ As a result, the `n` will be 1111 (Python built-in object "integer").
 ### 2. Using (more and more) data types 
 
 What if you want to use functions of which argument is not an object explained above such as number or string but a list or vector or array?  
-Basically, some Python data types are converted to corresponding Euslisp data types automatically:  
+Basically, some Python data types are converted to the corresponding Euslisp data types automatically (the literal expression of Euslisp object are made and passed as arguments):  
 (From Python to Euslisp)  
 
-|Type(Python)|Type(Euslisp)|Description|
-|:---|:---|:---|
-|integer|integer||
-|float|float||
-|None, False|null|(partially implemented)|
-|True|t||
-|string|string||
-|list|list||
-|dicttionary|hashtable|(not implemented)|
-|any other object|×|TypeError(not implemented)|
+| Object (Python)     | Object (Euslisp) | Description                                             |
+| :------------------ | :--------------- | :------------------------------------------------------ |
+| integer             | integer          |                                                         |
+| float               | float            |                                                         |
+| None, False         | null             |                                                         |
+| True                | t                |                                                         |
+| string              | string           |                                                         |
+| list, tuple, xrange | list             |                                                         |
+| dictionary          | ×                | TypeError (there is no literal of hashtable in Euslisp) |
+| any other object    | ×                | TypeError                                               |
 
 If you want to pass an object as an argument that is not listed on Type(Euslisp) column of the tabale, use *explicit type declaration*:  
 
-| Type(Python) | Type(Euslisp) | Description |
-| :--- | :--- | :--- |
-| EusSym | symbol |  |
-| EusFuncSym | function symbol |  |
-| EusStr | string |  |
-| EusCons | (dotted)list |  |
-| EusPlist | property list |  |
-| EusList | list |  |
-| EusIntVec | integer-vector |  |
-| EusFloatVec | float-vector |  |
-| EusBitVec | bit-vector |  |
-| EusVec | vector |  |
-| EusArray | array |  |
-| EusHash | hashtable | (not implemented) |
-| EusPath | pathname object |  |
+| Constructor (Pyhon) | Args (Python) | Object (python)                | Object (Euslisp) | Description                                                                |
+| :------------------ | :------------ | :----------------------------- | :--------------- | :------------------------------------------------------------------------- |
+| EusSym              | string        | <class 'pyeus.symbol'>         | symbol           | if invalid characters are in argument, raises SyntaxError                  |
+| EusFuncSym          | string        | <class 'pyeus.compiled_code'>  | function symbol  | if invalid characters are in argument, raises SyntaxError                  |
+| EusStr              | string        | <class 'pyeus.string'>         | string           |                                                                            |
+| EusCons             | list, tuple   | <class 'pyeus.cons'>           | (dotted) list    |                                                                            |
+| EusPlist            | list, tuple   | <class 'pyeus.cons'>           | property list    | if the shape of the argument is not (n, 2), raises SyntaxError             |
+| EusList             | list, tuple   | <class 'pyeus.cons'>           | list             |                                                                            |
+| EusIntVec           | list, tuple   | <class 'pyeus.integer_vector'> | integer-vector   | if there is an element in argument that is not integer, raises SyntaxError |
+| EusFloatVec         | list, tuple   | <class 'pyeus.float_vector'>   | float-vector     | if there is an element in argument that is not float, raises SyntaxError   |
+| EusBitVec           | list, tuple   | <class 'pyeus.bit_vector'>     | bit-vector       | if there is an element in argument that is nor 0 and 1, raises SyntaxError |
+| EusVec              | list, tuple   | <class 'pyeus.vector'>         | vector           |                                                                            |
+| EusArray            | list, tuple   | <class 'pyeus.array'>          | array            |                                                                            |
+| EusHash             | dictionary    | <class 'pyeus.hash_table'>     | hashtable        |                                                                            |
+| EusPath             | string        | <class 'pyeus.pathname'>       | pathname object  |                                                                            |
 
 By using the *Euslisp-like object constructor*, you can declare the type of an argument explicitly.  
 ```lisp
@@ -138,31 +144,35 @@ print(result)    # 1
 ```
 <br>
 
+
 Then, let's take a look at what will happen when the Euslisp returns the object that is not integer or float or null or t.  
 
 In short, it returns *Euslisp-like object* such as EusArray.  
 
 (From Euslisp to Python)  
 
-|Type(Euslisp)|Type(Python)|after `to_python` conversion|Description|
-|:---|:---|:---|:---|
-|integer|integer|×||
-|float|float|×||
-|nil|None|×||
-|t|True|×||
-|symbol|EusSym|string|(not implemented)|
-|function symbol|EusFuncSym||(not implemented)|
-|string|EusStr|string||
-|(dotted)list|EusCons|list||
-|list|EusList|list||
-|integer-vector|EusIntVec|list||
-|float-vector|EusFloatVec|list||
-|bit-vector|EusBitVec|list||
-|vector|EusVec|list||
-|array|EusArray|list||
-|hashtable|EusHash|dictionary||
-|pathname object|EusPath||
-|any other object|EusProxy|TypeError|(not implemented)|
+| Object (Euslisp)                | Object (Python)                | after `to_python` conversion | Description                                                 |
+| :------------------------------ | :----------------------------- | :--------------------------- | :---------------------------------------------------------- |
+| integer                         | integer                        | ×                            | AttributeError                                              |
+| float                           | float                          | ×                            | AttributeError                                              |
+| nil                             | None                           | ×                            | AttributeError                                              |
+| t                               | True                           | ×                            | AttributeError                                              |
+| symbol                          | <class 'pyeus.symbol'>         | string                       |                                                             |
+| function symbol                 | <class 'pyeus.compiled_code'>  | string                       | returns "#<compiled-code #...>", not a function-symbol-name |
+| string                          | <class 'pyeus.string'>         | string                       |                                                             |
+| (dotted) list                   | <class 'pyeus.cons'>           | list                         |                                                             |
+| property list                   | <class 'pyeus.cons'>           | list                         |                                                             |
+| list                            | <class 'pyeus.cons'>           | list                         |                                                             |
+| integer-vector                  | <class 'pyeus.integer_vector'> | list                         |                                                             |
+| float-vector                    | <class 'pyeus.float_vector'>   | list                         |                                                             |
+| bit-vector                      | <class 'pyeus.bit_vector'>     | list                         |                                                             |
+| vector                          | <class 'pyeus.vector'>         | list                         |                                                             |
+| array                           | <class 'pyeus.array'>          | list                         |                                                             |
+| hashtable                       | <class 'pyeus.hash_table'>     | dictionary                   |                                                             |
+| pathname object                 | <class 'pyeus.pathname'>       | string                       |                                                             |
+| any other instance of 'MyClass' | <class 'pyeus.MyClass'>        | string                       |                                                             |
+| class (not an instance)         | <class 'pyeus.metaclass'>      | string                       |                                                             |
+
 
 
 Going back to the first example in section 1,  
@@ -198,19 +208,34 @@ iv.to_python()    # [0,0,0,0]
 <br>
 <br>
 
-## Specific Debugging Tool  
-(not implemented)
+
+## 4. Using callback functions
+***
+(now writing)
+<br>
+<br>
+
+
+## 5. (Cool) type description interface
+***
+(now writing)
+<br>
+<br>
 
 
 ## API Documentation  
-(not implemented)
+***
+(now writing)
 <br>
 <br>
 
-## Hot Tip
 
-There are several implementations for Foreign Function Interface between Python and Euslisp.
-(The published one is implemented using interprocess communication by sockets.)
-This is simple, but there is a much faster implementation!   
+## Notes
+***
+This folder is migrated from ikeshou/CSG_research repository (private, for resarch use).
+Do not worry about the small number of commitment!
 <br>
-Although the FFI using C language as a bridge that I made is a bit complicated in bootstrapping, but much faster than this (about 100x times faster). I'm sure that it's going to be fantastic :wink:
+Now implementing: 
+- Type inference system in type description inteface
+- Specific debugger for Python and Euslisp FFI
+It's gonna be awesome :wink:

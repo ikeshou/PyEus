@@ -1,14 +1,23 @@
 #|
 ここを臨機応変にいじろう!
 |#
-;;;; デフォルト値は0。このファイルの関数のユニットテストを行う場合はここを1にする。その場合、call-python.soなどは呼ばれない。
-(defvar *unit-test-mode* 0)
+;;;; デフォルト値はnil。このファイルの関数のユニットテストを行う場合はここをtにする。
+(defvar *unit-test-mode* nil)
+
+(when *unit-test-mode* (warn "Running the unit-test!~%"))
 
 
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; *error-handler*を上書き ;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; symbol-tableを正しく使うためにバグフィックスずみのハッシュテーブルパッケージをロード ;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(require ":BUGFIXED-HASH" "testhash.l")
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; error処理用の関数、クラス (*error-handler*を上書き、eof-errorのハンドリング ;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;; my-eval, my-eval-with-proxyでの作業中にeuslispでエラーが起きたら捻り潰してerror:なる文字列を返せるようになっている。
 ;;; スレッド並行処理とか入れ始めたときに環境のエラーハンドラが書き換わっちゃってまずそうなので別々に登録できるinstall-error-handler関数を使用しようと思ったがマルチスレッドeuslispにしかないっぽいのでオーバーライド
@@ -16,14 +25,39 @@
 (defun original-error-handler (code msg1 form &optional (msg2))
   "original error handling function that throws 'euslispside-error"
   (terpri)
-  (throw 'euslispside-error (python-like-string-from-string (format nil "error code: ~A (~A). ~A in s-expression ~A" code msg1 msg2 form))))
+  (throw 'euslispside-error (python-like-string-from-string (format nil "error_code:~A (~A). ~A in s-expression ~A" code msg1 msg2 form))))
 
+
+(setq default-error-handler *error-handler*)
+
+
+;;; エラーハンドラが書き換えられているかどうか (unit test時にエラー時の挙動の調査まで行うかの判定に使用)
+(defparameter *original-error-mode* nil)
+
+
+(defun set-original-error-handler ()
+  (unless *original-error-mode* 
+    (setq *error-handler* #'original-error-handler)
+    (setq *original-error-mode* t)))
+
+(defun set-default-error-handler ()
+  (when *original-error-mode* 
+    (setq *error-handler* #'default-error-handler)
+    (setq *original-error-mode* nil)))
 
 
 ;;; このファイルのコード自体を開発しているときはコメントアウトしたほうがいい(謎の無限ループに陥る)
-;; (setq *error-handler* #'original-error-handler)
+(set-original-error-handler)
 
 
+(defclass eof-value :super object)
+(defvar *eof-value-object* (instantiate eof-value))
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; string copyのための関数たち ;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 
 ;;; 文字コード値を文字列へ変換するtrans関数
@@ -32,11 +66,6 @@
   "translate a character code (integer) to a character"
   (format nil "~c" val))
 
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; string copyのための関数たち。将来的にはProxy objectを作った時でもPython側で__str__(), __repr__()を読んだ時にこの関数を呼べるようにしておくと良さそう。;;;
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
 ;;; euslispのリスト, コンスを受け取り、pythonのリストとして評価できるように成形された文字列を生成して返す。コンスの場合は最後のセルのtailの値も拾われる。
 ;;; リスト, コンスの要素は任意で、その型に応じた変換が再帰的にそれぞれ成される。
@@ -167,7 +196,7 @@
 
 ;;; euslisp側で変換をできるだけやる場合の実装
 ;;; integer, float → 数値の文字列表記に
-;;; null → "None"に ("'None'"ではない)
+;;; nil → "None"に ("'None'"ではない)
 ;;; t → "True"に ("'True'"ではない)
 ;;; vector/string → 文字列に
 ;;; matrix(2「階」の配列で要素は実数) → 二次元リストの文字列表記に
@@ -195,7 +224,7 @@
 ;;; S式(S式の文字列表記ではない)を受取り、評価し、結果を文字列にして返す。
 (defun my-eval (sformula)
   "evaluate the s-expression and then returns the string notation"
-  ;; errorが生じたらこのeuslispside-errorでキャッチできるようにする。エラー時の返り値には"'error code: ...'"が入る。call stackをターミナルに吐き出してしまうのは今の所仕様。
+  ;; errorが生じたらこのeuslispside-errorでキャッチできるようにする。エラー時の返り値には"'error_code:...'"が入る。call stackをターミナルに吐き出してしまうのは今の所仕様。
   (let ((result (catch 'euslispside-error (python-like-string-from-obj (eval sformula)))))
     result))
 
@@ -206,26 +235,31 @@
 ;;; Proxy objectを返すようなモードのための関数、クラスたち ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 
+
+#|
+useful for debuggingと書かれたコメントは便利なので消さないようにしよう
+|#
+
 ;;; FFIで呼び出された戻り値を束縛しておく用のシンボルテーブルを管理するためのクラス
 (defclass ffi-symbols-manager :super object :slots (ffi-symbol-table symbol-count))
 (defmethod ffi-symbols-manager 
   (:set-symbol (obj)
     (progn
       (incf symbol-count)
-      (setf (gethash symbol-count ffi-symbol-table) obj)
+      (setf (BUGFIXED-HASH::gethash symbol-count ffi-symbol-table) obj)
       symbol-count))
   (:get-symbol-value (key-num)
-    (gethash key-num ffi-symbol-table))
+    (BUGFIXED-HASH::gethash key-num ffi-symbol-table))
   (:get-symbol-table ()
     ffi-symbol-table)
   (:get-symbol-count ()
     symbol-count)
   (:delete-symbol-pair (key-num)
-    (remhash key-num ffi-symbol-table))
+    (BUGFIXED-HASH::remhash key-num ffi-symbol-table))
 )
 
 ;;; ffi-symbol-tableを要素0のハッシュテーブルで, symbol-countを0で初期化。
-(defvar *ffi-symbols* (make-instance ffi-symbols-manager :ffi-symbol-table (make-hash-table) :symbol-count 0))
+(defvar *ffi-symbols* (make-instance ffi-symbols-manager :ffi-symbol-table (BUGFIXED-HASH::make-hash-table) :symbol-count 0))
 
 
 ;;; この関数を使用するようなS式がPythonから送られてくる。プロキシオブジェクトを作成させる際シンボルテーブルに登録した番号があるのでその値でもってテーブルを引く。その結果オブジェクトが手に入る。
@@ -239,27 +273,66 @@
 (defun make-proxy (obj)
   "If the arugument is a number nor null, the function register the received argument to the symbol-table and returns python-style string of the list that contains key number, package name and class name.
    Otherwise, returns the normal string notation."
+  (format t "~~inside make-proxy obj~~: ~s~%" obj)    ; useful for debugging
   (cond ((or (integerp obj) (floatp obj)) (format nil "~A" obj))
         ((null obj) "None")
         ((eq t obj) "True")
         (t (let ((key-num (send *ffi-symbols* :set-symbol obj))
                  (pkg-name (send *package* :name))
                  (cls-name (send (class obj) :name)))
-             (python-like-string-from-string (concatenate string "proxy: " (python-like-string-from-list (list key-num pkg-name cls-name))))))))
+             (python-like-string-from-string (concatenate string "proxy:" (python-like-string-from-list (list key-num pkg-name cls-name))))))))
 
 
 ;;; S式(S式の文字列表記ではない)を受け取り評価し、結果が値,nullの場合は文字列表記を、その他の場合は結果をシンボルにバインドしてプロキシオブジェクトをPython側で作らせるような命令文字列を返す。
 ;;; 「エラーが起きなければ」 "'proxy:[key-num,pkg-name,cls-name,]'"なる文字列が返る。
-;;; エラー時には"'error code: ...'なる文字列が返る。
+;;; エラー時には"'error_code:...'なる文字列が返る。
 ;;; モード(*string-copy-mode*の値)によってはCalledbyc内で呼ばれる。
 (defun my-eval-with-proxy (sformula)
   "evaluate the s-expression and then returns the string notation using make-proxy function"
   (let ((result (catch 'euslispside-error (make-proxy (eval sformula)))))
-  ;; (format t "sformula: ~A~%" sformula)
-  ;; (format t "obj: ~A~%" (eval (read-from-string sformula)))
-  ;; (format t "return from my-eval-with-proxy ~A~%" result)
-  result))
+    result))
 
+
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; callback-functionの処理 ;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+;;; 「Pythonのcallback関数に処理を投げる関数」を生成するマクロ
+(defmacro generate-callback-function (foreign-function-symbol)
+  `(defun ,foreign-function-symbol (&rest values)
+      ;; prin1-to-stringじゃないとシンボルが大文字表記になる。
+      (let ((command (make-python-callback-command (prin1-to-string (quote ,foreign-function-symbol)) values)))
+        (write-to-socket *sstream* command)
+        (loop
+          (let ((mode (read-socket-chunk *sstream*))
+                (sformula (read-socket-chunk *sstream*)))
+            (if (string= mode "b")
+                (progn 
+                  ;; (format t "(euslisp)> Received the callback result -> ~s~%" sformula)
+                  (return (eval sformula)))
+                (cond
+                  ((string= mode "n") (my-eval sformula))
+                  ((string= mode "c") (write-to-socket *sstream* (my-eval sformula)))
+                  ((string= mode "p") (write-to-socket *sstream* (my-eval-with-proxy sformula)))
+                  (t (warn "mode should be 'n' or 'c' or 'p'. got ~s~%" mode))))))))
+)
+
+
+;;; "'callback:pyfunc1 1 10 100'"といった文字列コマンドを生成する
+(defun make-python-callback-command (foreign-function-symbol-string &rest values)
+  ;; python-like-string-from-stringをやりたくなるけど、二重がけになるので厳禁! (proxyの部分がすでにエスケープされているのでバックスラッシュが二倍になってしまう)
+  ;; 幸いcallback:の部分はエスケープ擦る必要がないのでクオートではさむだけでOK
+  ;; ここでapplyしないとmake-python-callback-commandの&restバインディングで()が二重になる。すでにvaluesは引数(たち)を()でくくったリストとなってこちらにきている。
+  (concatenate string "'" "callback:" foreign-function-symbol-string (apply #'make-python-callback-body values) "'"))  
+
+(defun make-python-callback-body (values)
+  (with-output-to-string (str)
+    (dolist (elm values)
+      (princ " " str)    ;あちらで proxy:...や値をsplit()でわけられるように空白を追加
+      (princ (string-trim "'" (make-proxy elm)) str))))    ; "'proxy:...'"の "'"はいらない 
 
 
 
@@ -267,32 +340,79 @@
 ;;; メインの処理 ;;;
 ;;;;;;;;;;;;;;;;;;;;
 
+(defun read-socket (sock-stream)    ; socket-streamとすると組み込みのクラスとぶつかってヤバイ
+  (let (mode sformula)
+    (setq mode (read-socket-chunk *sstream*))
+    (setq sformula (read-socket-chunk *sstream*))
+    ;; (format t "(euslisp)> Recieved mode -> ~s~%" mode)    ; modeにはアルファベット一文字(S式そのもの)が入る。
+    ;; (format t "(euslisp)> Recieved s-expression -> ~s~%" sformula)    ; sには(S式の文字列表記ではなく)コンス(S式そのもの)が入る。 useful for debugging
+    (cond
+      ((string= mode "n") (my-eval sformula))    ; non-respose ただS式を評価させてその副作用をねらうとき(Python側への返り値はない)
+      ((string= mode "c") (write-to-socket sock-stream (my-eval sformula)))    ; copy
+      ((string= mode "p") (write-to-socket sock-stream (my-eval-with-proxy sformula)))    ; proxy
+      ((string= mode "b") sformula)    ; callback そのままPythonのcallback関数を呼びに行ったEuslisp関数へと結果を返すことになるはず。今の所この関数内でこのオプションがくることはないはず
+      (t (warn "mode should be 'n' or 'c' or 'p' or 'b'. got ~s~%" mode)))))
 
-;;; error hanclerを戻すかどうかは考えておく
-(if (= *unit-test-mode* 0)
-    (progn
-      (format t "(euslisp)> Hello, euslisp.~%") 
-      (setq saddr (make-socket-address :domain af_inet :host (second (unix:uname)) :port 50000))
-      (setq sport (make-socket-port saddr))
-      (format t  "(euslisp)> Waiting for connections...~%")
-      (setq sstream (make-server-socket-stream sport 4096))    ;; このiszeがバッファサイズかは不明
-      (format t "(euslisp)> Connected.~%")
-      (loop
-        (let (mode length result-string)
-          (setq mode (read sstream))
-          (setq sformula (read sstream))
-          ;; (format t "(euslisp)> Recieved mode -> ~s~%" mode)    ; modeにはアルファベット一文字(S式そのもの)が入る
-          ;; (format t "(euslisp)> Recieved s-expression -> ~s~%" sformula)    ; sには(S式の文字列表記ではなく)コンス(S式そのもの)が入る
 
-          (cond ((string= mode "n") (setq result-string (prin1-to-string (eval sformula))))    ; デバッグ用。Pythonで評価できる形ではない、ただの文字列表記("(1 2 2)"とかが返る)
-                ((string= mode "c") (setq result-string (my-eval sformula)))
-                ((string= mode "p") (setq result-string (my-eval-with-proxy sformula)))
-                (t (warn "mode should be 'n' or 'c' or 'p'. got ~s" mode)))
-          ;; (format t "(euslisp)> return length: ~s~%" (length result-string))
-          ;; (format t "(euslisp)> return: ~s~%" result-string)
-          (write-long (length result-string) sstream)    ; データ長をバイトで送りつける
-          (princ result-string sstream))    ; 続いて文字列表記を送りつける("は含まれない)
-          (finish-output sstream)
-      )
+(defun read-socket-chunk (sock-stream)
+  ;; (print "eus before read")
+  ;; (bench     ; ベンチマークを取る際はコメントアウトを下の)と合わせて解除。
+  (let ((chunk (read sock-stream nil *eof-value-object*)))    ; chunkはmodeかもしれないし、sformulaかもしれない。
+    (when (eq chunk *eof-value-object*)
+          ;; (format t "(euslisp)> soon be shutdown automatically...~%")
+          (unix::exit 0))
+    ;; (print "eus finished reading!")
+    chunk))
+  ;; )    ; ベンチマークを取る際はコメントアウトを上の(benchと合わせて解除。
+
+
+(defun write-to-socket (sock-stream command)
+  ;; (format t "(euslisp)> send length: ~s~%" (length command))
+  (format t "(euslisp)> send: ~s~%" command)    ; useful for debugging
+  (write-long (length command) sock-stream)    ; データ長をバイトで送りつける
+  (princ command sock-stream)    ; 続いて文字列表記を送りつける("は含まれない)
+  (finish-output sock-stream))
+
+
+(unless *unit-test-mode*
+    (let ((result
+      (catch 'euslispside-error
+        (progn
+          (format t "(euslisp)> Hello, euslisp.~%") 
+          ;; (setq saddr (make-socket-address :domain af_inet :host (second (unix:uname)) :port 50000))    ; MacOSでは動作しない
+          (setq saddr (make-socket-address :domain af_inet :host "127.0.0.1" :port 50000))
+          (setq sport (make-socket-port saddr))
+          (if (derivedp sport socket-port)
+              (progn
+                (format t  "(euslisp)> Waiting for connections...~%")
+                (defparameter *sstream* (make-server-socket-stream sport 4096))    ;; このsizeがバッファサイズかは不明
+                (format t "(euslisp)> Connected.~%")
+                (loop
+                  (read-socket *sstream*)
+                ))
+              (progn 
+                (format t "(euslisp)> failed to bind socket port. The process will soon be shut down...~%")
+                (unix::exit -1))
+          )
+        )
+      )))
+      (unless (null result) (progn (format t "unknown error occurred outside evaluation function~%") (format t "~s~%" result)))
     )
 )
+
+
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; for debug (measure a benchmark score) ;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(defun time()
+  (car (unix:ptimes)))
+
+(defun bench-func (func &rest args)
+  (let ((start (time)))
+    (let ((result (apply func args)))
+      (print (- (time) start))
+      result)))
+
+(defmacro bench (&body body)
+  `(bench-func #'(lambda () ,@body)))
