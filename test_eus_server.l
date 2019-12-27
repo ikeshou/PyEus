@@ -10,6 +10,8 @@
 ;;; debug-modeが1の時はここにカウント結果が溜まっていき最後に出力される。
 (defvar *passed-count* 0)
 
+;;; assertion errorとなったテスト番号が追加されていく
+(defparameter *error-test-num* nil)
 
 ;;; vがtであるか判定。nilならErrorを出力する。
 (defun assert-true (v &optional msg)
@@ -17,7 +19,8 @@
         (progn
             (format t "Error ~a occurred when t-checking ~a" (if (null msg) "" msg) v)
             (terpri)
-            (incf *error-count*))
+            (incf *error-count*)
+            (setq *error-test-num* (cons (+ *error-count* *passed-count*) *error-test-num*)))
         (if (= *debug-mode* 1) 
             (progn
               (format t "OK! (t expected. got ~a)" v)
@@ -39,7 +42,8 @@
               (print v1)
               (print v2)
               (format t "expected---~%")
-              (incf *error-count*))))
+              (incf *error-count*)
+              (setq *error-test-num* (cons (+ *error-count* *passed-count*))))))
 
 
 ;;; vが"'some text here'"という形の文字列になっているか判定。nilならErrorを出力する。
@@ -265,11 +269,18 @@
 (assert-equal (make-proxy nil) "None")
 (assert-equal (make-proxy t) "True")
 ; proxyを作るようなものたち
-(assert-equal (make-proxy #i(1 2 3)) (format nil "'proxy: [~A,\\\'USER\\\',\\\'integer-vector\\\']'" (send *ffi-symbols* :get-symbol-count)))
-(assert-equal (make-proxy #f(1 2 3)) (format nil "'proxy: [~A,\\\'USER\\\',\\\'float-vector\\\']'" (send *ffi-symbols* :get-symbol-count)))
-(assert-equal (make-proxy '(1 2 3)) (format nil "'proxy: [~A,\\\'USER\\\',\\\'cons\\\']'" (send *ffi-symbols* :get-symbol-count)))
+(assert-equal (make-proxy #i(1 2 3)) (format nil "'proxy:[~A,\\\'USER\\\',\\\'integer-vector\\\']'" (send *ffi-symbols* :get-symbol-count)))
+(assert-equal (make-proxy #f(1 2 3)) (format nil "'proxy:[~A,\\\'USER\\\',\\\'float-vector\\\']'" (send *ffi-symbols* :get-symbol-count)))
+(assert-equal (make-proxy '(1 2 3)) (format nil "'proxy:[~A,\\\'USER\\\',\\\'cons\\\']'" (send *ffi-symbols* :get-symbol-count)))
 
 
+
+;; callback-functionの処理用の関数の簡易テスト
+(assert-equal (make-python-callback-body '(1 2 3)) " 1 2 3")
+(assert-equal (make-python-callback-body '(t nil 1.0)) " True None 1.0")
+(assert-equal (make-python-callback-body '(#i(1 2 3 4) 5 6)) (format nil " proxy:[~A,\\\'USER\\\',\\\'integer-vector\\\'] 5 6" (send *ffi-symbols* :get-symbol-count)))
+
+(assert-equal (make-python-callback-command "foreign1" '(10 20)) "'callback:foreign1 10 20'")
 
 
 
@@ -277,26 +288,33 @@
 ;; error時の挙動の簡易テスト
 (terpri)
 (format t "# test error behavior.~%")
-(format t "### please ignore the error message below (call stack will be shown.) ###~%")
 
-; ファイルを読み込もうとし他のに失敗した時
-(assert-equal (my-eval (read-from-string "(require (string 'InvalidFileName))")) "'error code: 76 (). file #P\\\"invalidfilename\\\" not found in s-expression (require (string \\'invalidfilename))'")
+(if *original-error-mode*
+    (progn
+      (format t "### please ignore the error message below (call stack will be shown.) ###~%")
 
-; 未定義の参照を行った時
-(assert-equal (my-eval (read-from-string "(non-existent-func 1 2)")) "'error code: 13 (undefined function). non-existent-func in s-expression (eval sformula)'")
-(assert-equal (my-eval (read-from-string "(+ non-existent-symbol 2)")) "'error code: 12 (unbound variable). non-existent-symbol in s-expression (+ non-existent-symbol 2)'")
+      ; ファイルを読み込もうとし他のに失敗した時
+      (assert-equal (my-eval (read-from-string "(require (string 'InvalidFileName))")) "'error_code:76 (). file #P\\\"invalidfilename\\\" not found in s-expression (require (string \\'invalidfilename))'")
+
+      ; 未定義の参照を行った時
+      (assert-equal (my-eval (read-from-string "(non-existent-func 1 2)")) "'error_code:13 (undefined function). non-existent-func in s-expression (eval sformula)'")
+      (assert-equal (my-eval (read-from-string "(+ non-existent-symbol 2)")) "'error_code:12 (unbound variable). non-existent-symbol in s-expression (+ non-existent-symbol 2)'")
 
 
-(format t "### error checking section finished. ###~%")
+      (format t "### error checking section finished. ###~%"))
+    
+    (format t "Default error handler is not overwritten. Skipped this test.~%"))
 
 
 
 ;;; -------------------------
 ;;; -------------------------
 (terpri)
+(format t "================================~%")
 (if (> *error-count* 0)
     (progn 
-      (format t "* Failure: ~a errors *~%" *error-count*)
+      (format t "Failure: ~a errors in ~a~%" *error-count* *error-test-num*)
       (if (= *debug-mode* 1)
         (format t "passed: ~a test cases~%" *passed-count*)))
-    (print "* Entrypoint Test OK *"))
+    (format t "* Euslisp server UnitTest OK *~%"))
+(format t "================================~%")
