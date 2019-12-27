@@ -238,4 +238,5 @@ Do not worry about the small number of commitment!
 Now implementing: 
 - Type inference system in type description inteface
 - Specific debugger for Python and Euslisp FFI
+
 It's gonna be awesome :wink:
