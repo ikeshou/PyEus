@@ -107,17 +107,17 @@ Basically, some Python data types are converted to the corresponding Euslisp dat
 
 (From Python to Euslisp)  
 
-| Object (Python)     | Object (Euslisp)     | Description                           |
-| :------------------ | :------------------- | :------------------------------------ |
-| integer             | integer              |                                       |
-| float               | float                |                                       |
-| None, False         | null                 |                                       |
-| True                | t                    |                                       |
-| string              | string               |                                       |
-| list, tuple, xrange | list                 |                                       |
-| dictionary          | hash-table           |                                       |
-| function            | *Python-like object* | see [4. Using callback functions](#4) |
-| any other object    | ×                    | TypeError                             |
+| Object (Python)     | Object (Euslisp)     | Description                                  |
+| :------------------ | :------------------- | :------------------------------------------- |
+| integer             | integer              |                                              |
+| float               | float                |                                              |
+| None, False         | null                 |                                              |
+| True                | t                    |                                              |
+| string              | string               |                                              |
+| list, tuple, xrange | list                 |                                              |
+| dictionary          | hash-table           |                                              |
+| function            | *Python-like object* | see [4. Using callback functions](#callback) |
+| any other object    | ×                    | TypeError                                    |
 </div>
 <br>
 
@@ -254,6 +254,7 @@ murabito.get_age()    # 47
 <br>
 <br>
 
+<div id=callback>
 
 ### 4. Using callback functions
 ***
@@ -298,6 +299,7 @@ robop.mapcar(proxy_func_object, [[1,2,3], [4,5,6], [7,8,9]])
 <br>
 <br>
 
+<div id=type_description_interface>
 
 ### 5. (Cool) Type description interface
 ***
@@ -331,7 +333,7 @@ TEST.sum_of_0_0_element(EusArray([[9,10],[11,12]]), EusArray([[13,14],[15,16]]))
 TEST.sum_of_0_0_element(EusArray([[17,18],[19,20]]), EusArray([[21,22],[23,24]]))    # 38
 ```
 
-Are you getting tired of writing the [type description](#type_description)? 
+Are you getting tired of writing the [explicit type description](#type_description)? 
 PyEus library provides three distict systems that save your cost writing the explicit type descriptions:
 - set_params() helper function
 - logging system
@@ -354,6 +356,8 @@ TEST.sum_of_0_0_element([[17,18],[19,20]], [[21,22],[23,24]])    # 38
 
 (Now writing)
 
+<div id=type_inference_system>
+
 #### 5.3. type inference system
 
 (Now writing)
@@ -372,7 +376,7 @@ TEST.sum_of_0_0_element([[17,18],[19,20]], [[21,22],[23,24]])    # 38
 - `eus_server.l`: core program of the Python/Euslisp FFI
 - `pyeus_util.py`: helper functions for `pyeus.py`
 - `bugfixed_hash.l`: bug fixed hash-table for Euslisp
-- `inference_eusfunc.l`: type inference system for Euslisp functions (See [Type description interface](#5))
+- `inference_eusfunc.l`: type inference system for Euslisp functions (See [Type description interface](#type_description_interface) and [type inference system](#type_inference_sytem).)
 
 The followings are the unit test files. (For Python codes, doctest is written in `pyeus.py` and `pyeus_util.py`.)
 
