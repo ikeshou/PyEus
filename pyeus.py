@@ -5,8 +5,9 @@
 ライブラリバージョンのpyeus
 """
 import socket, shlex, subprocess, time, atexit, struct
-from enum import Enum
-import sys, string, re
+import re
+import pyeus_util as util
+from pyeus_util import EusError
 
 
 if __name__ == "pyeus":
@@ -28,8 +29,8 @@ if __name__ == "pyeus":
         なお、失敗すると 1 sec 後に再接続を試みるが、トータルで5回失敗するとこれ以上の接続を諦め、プログラムを終了する。
 
         Args:
-            host (str): ホスト名
-            port (int): ポート番号
+            host (str): host name
+            port (int): port number
         """
         if not hasattr(_connect_to_euslisp, 'failure_count'):
             _connect_to_euslisp.failure_count = 0
@@ -79,93 +80,6 @@ if __name__ == "pyeus":
 
 
 
-class EusError(Exception):
-    """Euslisp側で生じたエラーを知らせるメッセージをソケットストリームから受け取ったとき、そのエラーをラッピングするだけのエラークラス"""
-    pass
-
-
-# まだ使用していない。EusErrorを投げたほうが親切?
-EUSERROR_TO_PYTHON_ERROR = \
-    [RuntimeError,    #   "",				/*0*/
-     OverflowError,    # 	"stack overflow",		/*1 errcode=1..10 are fatal errors*/
-     MemoryError,    # 	"allocation",			/*2*/
-     RuntimeError,    # 	"",				/*3*/
-     RuntimeError,    # 	"",				/*4*/
-     RuntimeError,    # 	"",				/*5*/
-     RuntimeError,    # 	"",				/*6*/
-     RuntimeError,    # 	"",				/*7*/
-     RuntimeError,    # 	"",				/*8*/
-     RuntimeError,    # 	"",				/*9*/
-     RuntimeError,    # 	"",				/*10	end of fatal error*/
-     RuntimeError,    # 	"attempt to set to constant",	/*11 E_SETCONST */
-     NameError,    # 	"unbound variable",		/*12 E_UNBOUND  */
-     NameError,    # 	"undefined function",		/*13 E_UNDEF    */
-     TypeError,    # 	"mismatch argument",		/*14 E_MISMATCHARG */
-     SyntaxError,    # 	"illegal function",		/*15 E_ILLFUNC */
-     SyntaxError,    # 	"illegal character",		/*16 E_ILLCH */
-     SyntaxError,    # 	"illegal delimiter",		/*17 E_READ */
-     RuntimeError,    # 	"write?",			/*18 E_WRITE*/
-     RuntimeError,    # 	"too long string",		/*19 E_LONGSTRING */
-     TypeError,    # 	"symbol expected",
-     TypeError,    # 	"list expected",
-     SyntaxError,    # 	"illegal lambda form",
-     SyntaxError,    #  "illegal lambda parameter syntax",
-     RuntimeError,    # 	"no catcher found",
-     SyntaxError,    # 	"no such block",
-     TypeError,    # 	"stream expected",
-     SyntaxError,    # 	"illegal stream direction keyword",
-     TypeError,    # 	"integer expected",
-     TypeError,    # 	"string expected",
-     OSError,    # 	"error in open file",
-     EOFError,    # 	"EOF hit",
-     TypeError,    # 	"number expected",
-     OverflowError,    # 	"class table overflow",
-     TypeError,    # 	"class expected",
-     TypeError,    # 	"vector expected",
-     ValueError,    # 	"array size must be positive",
-     RuntimeError,    # 	"duplicated object variable name",
-     RuntimeError,    # 	"cannot make instance",
-     IndexError,    # 	"array index out of range",		/*  E_ARRAYINDEX */
-     AttributeError,    # 	"cannot find method",
-     RuntimeError,    # 	"circular list",    # 3.5以前はRecursionErrorがない
-     SyntaxError,    # 	"unknown sharp macro",
-     TypeError,    # 	"list expected for an element of an alist",
-     TypeError,    # 	"macro expected",
-     ImportError,    # 	"no such package",    # ModuleNotFoundErrorは3.6から
-     ImportError,    # 	"package name",
-     SyntaxError,    # 	"invalid lisp object form",
-     NameError,    # 	"no such object variable",
-     TypeError,    # 	"sequence expected",
-     IndexError,    # 	"illegal start/end index",
-     NameError,    # 	"no super class",
-     SyntaxError,    # 	"invalid format string",
-     TypeError,    # 	"float vector expected",
-     ValueError,    # 	"char code out of range",
-     ValueError,    # 	"vector dimension mismatch",
-     TypeError,    # 	"object expected",
-     TypeError,    # 	"type mismatch",
-     SyntaxError,    # 	"declaration is not allowed here",
-     SyntaxError,    # 	"illegal declaration form",
-     SyntaxError,    # 	"cannot be used for a variable",
-     SyntaxError,    # 	"illegal rotation axis",
-     RuntimeError,    # 	"multiple variable declaration",
-     SyntaxError,    # 	"illegal #n= or #n= label",
-     SyntaxError,    # 	"illegal #f( expression",
-     SyntaxError,    # 	"illegal #v or #j expression", 
-     socket.gaierror,    # 	"invalid socket address",
-     TypeError,    # 	"array expected",
-     ValueError,    # 	"array dimension mismatch",
-     TypeError,    # 	"keyword expected for arguments",
-     TypeError,    # 	"no such keyword",
-     TypeError,    # 	"integer vector expected",
-     IndexError,    # 	"sequence index out of range",
-     TypeError,    # 	"not a bit vector",
-     NameError,    # 	"no such external symbol",
-     RuntimeError,    # 	"symbol conflict",
-     RuntimeError,    # 	"",
-     RuntimeError,    # 	"E_END",
-    ]
-
 # Pythonのコールバック関数をEuslispに送る際、本体の関数オブジェクトを登録しておく辞書
 global_callback_table = {}
 
@@ -173,46 +87,7 @@ global_callback_table = {}
 global_callback_key_count = 0
 
 
-def _valid_sexp_predicate(sexp):
-    """
-    文字列中の"のエスケープ判定もしている。文字列リテラルを除外しsexp中に出現する()が全て関数コールとなるようにしてから、(と)の対応関係をチェックする。
-    Args:
-        sexp (str): euslispに送りつけるS式
-    Returns:
-        bool: S式が正しいかどうか
-    
-    >>> _valid_sexp_predicate("(+ 1 2)")
-    True
-
-    >>> _valid_sexp_predicate('(princ "hoge")')
-    True
-
-    >>> _valid_sexp_predicate("(+ 1 2 3))")    # excess ')'
-    False
-
-    >>> _valid_sexp_predicate("(list 1 2 (3)")    # insufficient ')
-    False
-  
-    >>> sexp = '(concatenate string "really\" weird(" "string\"!")'    # valid s-expression (エスケープ処理ができてないと'(concatenate string weird( string))'なる文字列が残されinvalidと判定されてしまう)
-    >>> _valid_sexp_predicate(sexp)
-    True
-    """
-    sub = re.sub(r'(?<!\\)\".*(?<!\\)\"', '', sexp)
-    counter = 0
-    for char in sub:
-        if char == '(':
-            counter += 1
-        elif char == ')':
-            if counter > 0:
-                counter -= 1 
-            else:
-                return False
-    if counter > 0:
-        return False
-    return True
-
-
-def receive_response():    # kesu
+def receive_response():
     """
     send_sexp()関数内で呼ばれる補助関数で、ソケットストリームからデータを取得する。
 
@@ -262,13 +137,12 @@ def send_sexp(sexp, mode):
 
     Args:
         sexp (str): syntax expression
-        mode (str): 'n' for non-response mode, 'c' for copy mode, p' for proxy mode, and 'b' for callback response mode
+        mode (str): 'n' for non-response mode, 'c' for copy mode, p' for proxy mode, and 'b' for callback response mode. Currrently, 'n' is only used in destructor and macro call.
     Returns:
         response (str): result string that has not yet evaluated
     """
     try:
-        # for debug
-        if not _valid_sexp_predicate(sexp):
+        if not util.valid_sexp_predicate(sexp):
             raise SyntaxError("got invalid sexp [excess '(' or ')']: {}".format(sexp))
         if mode not in ('n', 'c', 'p', 'b'):
             raise SyntaxError("got invalid mode (nor 'n' and 'c' and 'p' and 'b'): {}".format(mode))
@@ -434,9 +308,7 @@ def load_library(src, module_name=None):
     Raises:
         ImportError: Euslispでloadに失敗したとき (呼び出し元でしっかりキャッチする)
     """
-    module_name = module_name.upper()    # 大文字にしてあげる。symbol_mode=Falseなのにmodule_nameを小文字にして呼び出してしまった人用。"'rcb4lisp"が"'RCB4LSP"になったり":rcb4lisp"が":RCB4LISP"になったりするのはlispのリーダ的に問題ない。
-    if module_name.startswith("'") or module_name.startswith(":"):
-        module_name = module_name[1:]
+    module_name = util.pkg_uniform_upper(module_name)
     try:
         if module_name is None:
             # euslisp側でloadする
@@ -447,7 +319,6 @@ def load_library(src, module_name=None):
     
     except EusError:
         raise ImportError("Failed to load modules {} in Euslisp.".format(src))
-
 
 
 # パッケージオブジェクトをグローバルから引けるようにする。キーはパッケージ名で値は対応するEus_pkgオブジェクト
@@ -478,9 +349,7 @@ def make_eus_instance(pkg="USER", option="underscore"):
     Returns:
         Eus_pkg class instance
     """
-    pkg = pkg.upper()
-    if pkg.startswith("'") or pkg.startswith(":"):
-        pkg = pkg[1:]
+    pkg = util.pkg_uniform_upper(pkg)
      
     if pkg in eus_package_table:
         instance = eus_package_table[pkg]
@@ -490,25 +359,6 @@ def make_eus_instance(pkg="USER", option="underscore"):
         instance = Eus_pkg(pkg, option)
         eus_package_table[pkg] = instance
         return instance
-
-
-"""
-Euslispのパッケージ関連の挙動の補足。
-lispのリーダはシンボルの大文字、小文字を区別せず全て大文字として認識する。が文字列はもちろん区別する。
-
-(make-package "HOGE")    ; <- ここを小文字で作ることはないはず。hoge::tmpやHOGE::tmpという形でアクセスできなくなるので(両方HOGE::tmpとしてリーダに読まれる)
-(in-package "HOGE")
-(setq tmp 10)
-(in-package "USER")
-hoge::tmp    -> 10
-HOGE::tmp    -> 10
-
-; 作り方には他にも
-; (make-package 'piyo) (make-package :koko) などの方法がある。    <- こちらは 'PIYO や :TARO でもよい。
-
-; 上記でどの方法で作ったやつも (in-package :hoge) や (in-package :HOGE) や (in-package 'hoge) や (in-package 'HOGE) という形でアクセスできる。なんなら(in-package ':hoge)もOK。
-; "SYM" と 'sym と 'SYM と :sym と :SYM ':symは区別されていない。
-"""
 
 
 class EusContextManager(object):
@@ -570,10 +420,10 @@ class Eus_pkg(object):    # 2系ではobjectを継承しないと旧スタイル
             self._option = option
             
             # あらゆるパッケージ内に存在するシンボル名を文字列表記に直したものを要素にもつリストがきているはず。これらの要素は全てパッケージ解決演算子'::'を含む。 
-            self._classlist = self.full_qualified(eval_foreign_vm_copy("(mapcar #'(lambda (x) (send x :name)) (system:list-all-classes))"))
+            self._classlist =  util.full_qualified(self._pkg, eval_foreign_vm_copy("(mapcar #'(lambda (x) (send x :name)) (system:list-all-classes))"))
             # LISPパッケージ内の変数も拾ってきて連結したリストを取得している。variables関数はclassも含んでしまっている(クラスはシンボルの名前空間内に定義されており、この関数はシンボルの名前空間を参照するのだろう)。それらを除く。
-            self._varlist = filter(lambda name: name not in self._classlist, self.full_qualified(eval_foreign_vm_copy('(append (variables "" "LISP") (variables "" "{}"))'.format(self._pkg))))
-            self._funclist = self.full_qualified(eval_foreign_vm_copy('(append (functions "" "LISP") (functions "" "{}"))'.format(self._pkg)))
+            self._varlist = filter(lambda name: name not in self._classlist,  util.full_qualified(self._pkg, eval_foreign_vm_copy('(append (variables "" "LISP") (variables "" "{}"))'.format(self._pkg))))
+            self._funclist =  util.full_qualified(self._pkg, eval_foreign_vm_copy('(append (functions "" "LISP") (functions "" "{}"))'.format(self._pkg)))
 
             self._vartable = {}
             self._functable = {}
@@ -581,24 +431,23 @@ class Eus_pkg(object):    # 2系ではobjectを継承しないと旧スタイル
             
             for var_name in self._varlist:
                 # optionに従って変換した文字列を取得。変換後のqualifyされた文字列からはpkg(大文字表記)::が消え、許可されない記号が変更されている。
-                changed_var_name = _change_valid_name(self._pkg, var_name, self._option) 
+                changed_var_name = util.change_valid_name(self._pkg, var_name, self._option) 
                 # python側のシンボルテーブルには変換後の文字列で登録される。値として対応するEuslispのシンボルの文字列表記をもつ。
                 self._vartable[changed_var_name] = var_name    
 
             for class_name in self._classlist:
-                changed_class_name = _change_valid_name(self._pkg, class_name, self._option)
-                # 内部でメソッド名をクラスのもつ辞書に登録するので、その際_change_valid_name関数を呼ぶ必要がでてくる。それに必要な引数を渡す。
+                changed_class_name = util.change_valid_name(self._pkg, class_name, self._option)
+                # 内部でメソッド名をクラスのもつ辞書に登録するので、その際util.change_valid_name関数を呼ぶ必要がでてくる。それに必要な引数を渡す。
                 self._classtable[changed_class_name] = _make_proxy_class(self._pkg, class_name, self._option)
             
-            # set_params()メソッドで元の関数名を復元するときに使用する
+            # set_params()メソッドで元の関数名を復元するときに使用していた(が今は使われていない)
             self._from_changed_to_default_func_name = {}
-
             
             # 関数の名前空間はシンボル(変数、クラス名)の名前空間とわかれている。名前がかぶっているものはfunc_をつけたもののみを、かぶっていないものは両方を定義する。関数はfunc.hogeという形でも明示的に呼べるようにする。
             self.func = FunctionNamespace(self._pkg)
 
             for func_name in self._funclist:
-                changed_func_name = _change_valid_name(self._pkg, func_name, self._option)
+                changed_func_name = util.change_valid_name(self._pkg, func_name, self._option)
                 self._from_changed_to_default_func_name[changed_func_name] = func_name
                 wrapper_function = _make_wrapper_func(func_name)
 
@@ -612,44 +461,6 @@ class Eus_pkg(object):    # 2系ではobjectを継承しないと旧スタイル
                 # 衝突しているものの対応その2  
                 changed_func_name = "func_" + changed_func_name
                 self._functable[changed_func_name] = wrapper_function
-
-
-            # コンストラクタ関数の集合を定義しておく。set_params関数内でエラー対応のために使用する。
-            self.vald_constructor =  {self.EusSym, self.EusFuncSym, self.EusStr, self.EusHash,
-                                    self.EusCons, self.EusList, self.EusPlist, self.EusArray,
-                                    self.EusVec, self.EusIntVec, self.EusFloatVec, self.EusBitVec,
-                                    self.EusPath}
-
-
-
-    def full_qualified(self, symbols):
-        """
-        文字列表記されたシンボルのリスト(このEus_pkgクラスと対応するEuslispのパッケージ以外のシンボルが含まれていても良い)を受け取り、
-        対応するパッケージ内のシンボルのみ取り出し、それぞれパッケージ接頭語(大文字)をつけ、リストにして返す。
-
-        Args:
-            symbols (list): 文字列表記されたシンボルのリスト。パッケージ名は小文字表記でも大文字表記で登録されていても良い。(['test::tmp']でも、['TEST::tmp']でも可)
-        Returns:
-            result (list): 文字列表記されたシンボルのリスト。
-        """
-        result = []
-        for symbol in symbols:
-            if '::' in symbol:
-                pkg_of_symbol , suffix_of_symbol = symbol.split('::')    # ここは'user'や'test'といった小文字表記で返ってくることがほとんど
-                pkg_of_symbol = pkg_of_symbol.upper()
-                symbol = pkg_of_symbol + '::' + suffix_of_symbol
-            elif ':' in symbol:
-                pkg_of_symbol , suffix_of_symbol = symbol.split(':')    # ここは'compiler'といった小文字表記がほとんどだろう。compiler:identifierはCOMPILER:identifierなるシンボルになる
-                pkg_of_symbol = pkg_of_symbol.upper()
-                symbol = pkg_of_symbol + ':' + suffix_of_symbol                        
-            else:
-                pkg_of_symbol = self._pkg    # current packageは指定したpkg名になっているはず。(コンテキストマネージャ内なので)
-                symbol = pkg_of_symbol + '::' + symbol
-            
-            # LISP packageの組み込み関数などはパッケージ接頭語なしに使えるようになっている。この特定のパッケージ内からもあたかもパッケージ内の関数かのように使えるようにする。
-            if pkg_of_symbol == self._pkg or pkg_of_symbol == "LISP":
-                result.append(symbol)    # cls_pkg(大文字) + '::'か':' + cls_name)
-        return result
 
 
     def __getattr__(self, name):
@@ -679,193 +490,11 @@ class Eus_pkg(object):    # 2系ではobjectを継承しないと旧スタイル
             プロキシクラスオブジェクト
         """
         assert '::' in class_name  or ':' in class_name
-        changed_class_name = _change_valid_name(self._pkg, class_name, self._option)
+        changed_class_name = util.change_valid_name(self._pkg, class_name, self._option)
 
         return self._classtable[changed_class_name]
     
-
-    def EusSym(self, name):
-        if not isinstance(name, str):
-            raise TypeError("EusSym takes a string as an argument. got {}".format(name))
-        if re.search(r"[\'\(\)\.\"\;]", name):
-            raise SyntaxError("Symbol name cannot contain ', (, ), \" and ;. got {}".format(name))
-        if name.isdigit():
-            raise SyntaxError("Symbol name that only consists of digit is invalid. got {}".format(name))
-        self.eus_prefix = "'"
-        # パッケージ名を適宜つけないとシンボルアクセスできぬ
-        self.python_literal = self.full_qualified([name])[0]
-        # quoteを二重にしてやる必用はない。lispのreadはデータモードで読み込むので、quoteが１つあればEuslispでevalした際にシンボルとなる。
-        proxy = eval_foreign_vm_proxy(self.eus_prefix + "{}".format(self.python_literal) + " ")    # socketの向こう側では(read)で待機している。S式の塊がわかるようスペースが必用
-        return proxy
-
-
-    def EusFuncSym(self, func_name):
-        if not isinstance(func_name, str):
-            raise TypeError("EusFuncSym takes a string as an argument. got {}".format(func_name))
-        if re.search(r"[\'\(\)\.\"\;]", func_name):
-            raise SyntaxError("Function name cannot contain ', (, ), \" and ;. got {}".format(func_name))
-        if func_name.isdigit():
-            raise SyntaxError("Function name that only consists of digit is invalid. got {}".format(func_name))
-        self.eus_prefix = "#'"
-        self.python_literal = self.full_qualified([func_name])[0]
-        proxy = eval_foreign_vm_proxy(self.eus_prefix + "{}".format(self.python_literal) + " ")    # socketの向こう側では(read)で待機している。S式の塊がわかるようスペースが必用
-        return proxy
-
-
-    def EusStr(self, s=''):
-        if not isinstance(s, str):
-            raise TypeError("EusStr takes a string as an argument. got {}".format(s))
-        self.eus_prefix = '"'
-        self.eus_suffix = '"'
-        self.python_literal = s
-        proxy = eval_foreign_vm_proxy(self.eus_prefix + "{}".format(self.python_literal + self.eus_suffix) + " ")    # socketの向こう側では(read)で待機している。S式の塊がわかるようスペースをぶちこむ
-        return proxy
-
-
-    def EusHash(self, d={}):
-        if not isinstance(d, dict):
-            raise TypeError("EusHash takes a dictionary as an argument. got {}".format(d))
-        filling = ""
-        for key, value in d.items():
-            filling += '(setf (gethash "{}" hsh) {})'.format(key, _translate_tuple((value, )))
-        command = "(let ((hsh (make-hash-table))) (progn {}) hsh)".format(filling)
-        proxy = eval_foreign_vm_proxy(command)
-        return proxy
-
-
-    def EusCons(self, sequence=[]):
-        if not isinstance(sequence, (list, tuple)):
-            raise TypeError("EusCons takes a sequence (list or tuple) as an argument. got {}".format(sequence))
-        self.eus_prefix = "'"
-        self.python_literal = sequence
-        if len(self.python_literal) == 0 or len(self.python_literal) == 1:
-            proxy =  eval_foreign_vm_proxy('({})'.format(_translate_tuple(t=tuple(self.python_literal), recursive=True)))
-        else:
-            car = _translate_tuple(t=self.python_literal[:-1], recursive=True) 
-            cdr = _translate_tuple(t=self.python_literal[-1:], recursive=True)    # tにリストがバインドされるのがポイント([-1]じゃだめ)
-            proxy = eval_foreign_vm_proxy(self.eus_prefix + '({} . {})'.format(car, cdr) + " ")     # socketの向こう側では(read)で待機している。S式の塊がわかるようスペースをぶちこむ
-        return proxy
-
-
-    def EusList(self, sequence=[]):
-        if not isinstance(sequence, (list, tuple)):
-            raise TypeError("EusPlist takes a sequence (list or tuple) as an argument. got {}".format(sequence))
-        self.eus_prefix = "'"
-        self.python_literal = sequence
-        proxy = eval_foreign_vm_proxy(self.eus_prefix + '({})'.format(_translate_tuple(t=self.python_literal, recursive=True)) + " ")    # socketの向こう側では(read)で待機している。S式の塊がわかるようスペースをぶちこむ
-        return proxy
-
-
-    def EusPlist(self, sequence=[[None, None]]):
-        if not isinstance(sequence, (list, tuple)):
-            raise TypeError("EusPList takes a sequence (list or tuple) as an argument. got {}".format(sequence))
-        if not all(map(lambda x: len(x) == 2, sequence)):
-            raise SyntaxError("The shape of property list should be (n, 2). got {}".format(sequence))
-        self.eus_prefix = "'"
-        self.python_literal = sequence
-        pairs = ''
-        for pair in self.python_literal:
-            car = _translate_tuple(t=pair[:1], recursive=True)    # tにリストがバインドされるのがポイント([0]じゃだめ)
-            cdr = _translate_tuple(t=pair[1:], recursive=True)
-            pairs += '({} . {})'.format(car, cdr)
-        proxy = eval_foreign_vm_proxy(self.eus_prefix + '({})'.format(pairs) + " ")    # socketの向こう側では(read)で待機している。S式の塊がわかるようスペースをぶちこむ
-        return proxy
-
-
-    def EusArray(self, sequence=[]):
-        if not isinstance(sequence, (list, tuple)):
-            raise TypeError("EusArray takes a sequence (list or tuple) as an argument. got {}".format(sequence))
-        self.eus_prefix = "#A"
-        self.python_literal = sequence    
-        proxy = eval_foreign_vm_proxy(self.eus_prefix + '({})'.format(_translate_tuple(t=self.python_literal, recursive=True)) + " ")    # socketの向こう側では(read)で待機している。S式の塊がわかるようスペースをぶちこむ
-        return proxy
-
-
-    def EusVec(self, sequence=[]):
-        if not isinstance(sequence, (list, tuple)):
-            raise TypeError("EusVec takes a sequence (list or tuple) as an argument. got {}".format(sequence))
-        self.eus_prefix = "#"
-        self.python_literal = sequence        
-        proxy = eval_foreign_vm_proxy(self.eus_prefix + '({})'.format(_translate_tuple(t=self.python_literal, recursive=True)) + " ")    # socketの向こう側では(read)で待機している。S式の塊がわかるようスペースをぶちこむ
-        return proxy
-
-
-    def EusIntVec(self, sequence=[]):
-        if not isinstance(sequence, (list, tuple)):
-            raise TypeError("EusIntVec takes a sequence (list or tuple) as an argument. got {}".format(sequence))
-        if not all(map(lambda x: isinstance(x, (int, long)) or x is None, sequence)):
-            raise SyntaxError("Integer expected as an element. got {}".format(sequence))
-        self.eus_prefix = "#I"
-        self.python_literal = sequence        
-        proxy = eval_foreign_vm_proxy(self.eus_prefix + '({})'.format(_translate_tuple(t=self.python_literal, recursive=True)) + " ")     # socketの向こう側では(read)で待機している。S式の塊がわかるようスペースをぶちこむ
-        return proxy
-
-
-    def EusFloatVec(self, sequence=[]):
-        if not isinstance(sequence, (list, tuple)):
-            raise TypeError("EusFloatVec takes a sequence (list or tuple) as an argument. got {}".format(sequence))
-        if not all(map(lambda x: isinstance(x, float) or x is None, sequence)):
-            raise SyntaxError("Float expected as an element. got {}".format(sequence))
-        self.eus_prefix = "#F"
-        self.python_literal = sequence        
-        proxy = eval_foreign_vm_proxy(self.eus_prefix + '({})'.format(_translate_tuple(t=self.python_literal, recursive=True)) + " ")    # socketの向こう側では(read)で待機している。S式の塊がわかるようスペースをぶちこむ
-        return proxy
-
-
-    def EusBitVec(self, sequence=[]):
-        if not isinstance(sequence, (list, tuple)):
-            raise TypeError("EusBitVec takes a sequence (list or tuple) as an argument. got {}".format(sequence))
-        if not all(map(lambda x: x == 0 or x == 1 or x is None, sequence)):
-            raise SyntaxError("0 or 1 expected as an element. got {}".format(sequence))
-        self.eus_prefix = "#*"
-        self.python_literal = sequence
-        # bit-vectorだけリテラルが #*1010のような表記であることに留意    
-        proxy = eval_foreign_vm_proxy(self.eus_prefix + '{}'.format("".join(map(lambda b: str(b), self.python_literal))) + " ")    # socketの向こう側では(read)で待機している。S式の塊がわかるようスペースをぶちこむ
-        return proxy
-
-
-    def EusPath(self, name='/'):
-        if not isinstance(name, str):
-            raise TypeError("EusPath takes a string as an argument. got {}".format(name))
-        self.eus_prefix = "#P"
-        self.python_literal = name
-        proxy = eval_foreign_vm_proxy(self.eus_prefix + '"{}"'.format(self.python_literal) + " ")    # socketの向こう側では(read)で待機している。S式の塊がわかるようスペースをぶちこむ
-        return proxy
-    
-
-    
-
-    ##############################################
-    #### 関数の明示的な型指定に用いる便利関数 ####
-    ##############################################
-    def set_params(self, changed_func_name, *constructor_args, **constructor_kwargs):
-        """
-        changed_func_nameと結び付けられているEuslisp wraper関数を、内部で引数に対しconstructorを噛ましてから送り込むEuslisp wrapper関数へと上書きする。
-        
-        Args:
-            changed_func_name (str): 型指定を行いたい関数名 (Python側での表記)
-            constructor_args (tuple): その関数の引数に対応したコンストラクタ関数のタプル
-            constructor_kwargs (dict): その関数の引数に対応したコンストラクタ関数のディクショナリ
-        
-        Raises:
-            TypeError: 適切なコンストラクタが渡されていないとき (package.EusListなどと表記する必要があることに注意)
-            NameError: 指定された関数名をこのパッケージから発見できなかったとき
-        """
-        if not all(map(lambda x: x in self.vald_constructor, constructor_args)) or not all(map(lambda x: x in self.vald_constructor, constructor_kwargs.values())):
-            raise TypeError("args shoud be one of the constructor in package {}. got {} {}".format(self._pkg, constructor_args, constructor_kwargs.values()))
-
-        if changed_func_name in self._functable:
-            func_name = self._from_changed_to_default_func_name[changed_func_name]
-            self._functable[changed_func_name] = _make_wrapper_func_with_type(func_name, *constructor_args, **constructor_kwargs)
-        elif changed_func_name in self.func._inner_functable:
-            func_name = self._from_changed_to_default_func_name[changed_func_name]
-            self.func._inner_functable[changed_func_name] = _make_wrapper_func_with_type(func_name, *constructor_args, **constructor_kwargs)
-        else:
-            raise NameError("cannot find the function named {} in package {}.".format(changed_func_name, self._pkg))
-        
-
-
-
+ 
 
 #######################################################
 #### Euslispのカレントパッケージをいじるための関数 ####
@@ -894,61 +523,216 @@ def set_current_pkg(pkg):
 
 
 
+#########################################################
+#### 明示的な型変換のためのコンストラクタ (風の関数) ####
+#########################################################
+def EusSym(pkg, name):
+    pkg = util.pkg_uniform_upper(pkg)
+    if not isinstance(name, str):
+        raise TypeError("EusSym takes a string as an argument. got {}".format(name))
+    if re.search(r"[\'\(\)\.\"\;]", name):
+        raise SyntaxError("Symbol name cannot contain ', (, ), \" and ;. got {}".format(name))
+    if name.isdigit():
+        raise SyntaxError("Symbol name that only consists of digit is invalid. got {}".format(name))
+    eus_prefix = "'"
+    # パッケージ名を適宜つけないとシンボルアクセスできぬ
+    python_literal =  util.full_qualified(pkg, [name])[0]
+    # quoteを二重にしてやる必用はない。lispのreadはデータモードで読み込むので、quoteが１つあればEuslispでevalした際にシンボルとなる。
+    proxy = eval_foreign_vm_proxy(eus_prefix + "{}".format(python_literal) + " ")    # socketの向こう側では(read)で待機している。S式の塊がわかるようスペースが必用
+    return proxy
 
 
-#############################################
-#### Eus_pkgのクラス内で使う補助関数たち ####
-#############################################
-def _change_valid_name(pkg, name, option="underscore"):
-    """
-    Euslispでの変数名や関数名は+-*/@$%^&=<>~.を使えるのでpythonの識別子ではこれらを変換する必要がある。また、パッケージ接頭語HOGE::やPIYO:を取り除く必要がある。
-    optionはunderscoreの他にunicodeにする技も考えたが、python2ではunicodeは変数名に使えないのでサポートしない。
+def EusFuncSym(pkg, func_name):
+    pkg = util.pkg_uniform_upper(pkg)
+    if not isinstance(func_name, str):
+        raise TypeError("EusFuncSym takes a string as an argument. got {}".format(func_name))
+    if re.search(r"[\'\(\)\.\"\;]", func_name):
+        raise SyntaxError("Function name cannot contain ', (, ), \" and ;. got {}".format(func_name))
+    if func_name.isdigit():
+        raise SyntaxError("Function name that only consists of digit is invalid. got {}".format(func_name))
+    eus_prefix = "#'"
+    python_literal = util.full_qualified(pkg, [func_name])[0]
+    proxy = eval_foreign_vm_proxy(eus_prefix + "{}".format(python_literal) + " ")    # socketの向こう側では(read)で待機している。S式の塊がわかるようスペースが必用
+    return proxy
 
 
-    >>> _change_valid_name("TEST", "TEST::*hoge*")
-    '_hoge_'
-
-    >>> _change_valid_name("RCB4LISP", "RCB4LISP::compile-code")
-    'compile_code'
-
-    >>> _change_valid_name("TEST", "LISP::reverse")
-    'reverse'
-
-    >>> _change_valid_name("TEST", "LISP::*eusdir*")
-    '_eusdir_'
-
-    >>> _change_valid_name("pkg", "pkg::some-name", "non_existent_option")
-    Traceback (most recent call last):
-     ...
-    TypeError: Currently, only 'underscore' is allowed as an option argument.
+def EusStr(s=''):
+    if not isinstance(s, str):
+        raise TypeError("EusStr takes a string as an argument. got {}".format(s))
+    eus_prefix = '"'
+    eus_suffix = '"'
+    python_literal = s
+    proxy = eval_foreign_vm_proxy(eus_prefix + "{}".format(python_literal + eus_suffix) + " ")    # socketの向こう側では(read)で待機している。S式の塊がわかるようスペースをぶちこむ
+    return proxy
 
 
-    Args:
-        pkg (str): パッケージ名(大文字)
-        name (str): eusの関数名や変数名 (qualifyされていることを仮定する。つまり大文字でpackage接頭語がついているHOGE::varなどを想定。)
-        option (str): どのようにpythonでの禁止シンボルを変換するか。今の所_に変換するのみ
-    Returns:
-        s_new (str): 新たに作成された変換後の文字列
-    Raises:
-        TypeError: optionで"underscore"以外がよばれたとき
-    """
-    if name.startswith(pkg+"::") or name.startswith("LISP::"):
-        name = name[len(pkg)+2:]
-    if name.startswith(pkg+":") or name.startswith("LISP:"):
-        name = name[len(pkg)+1:]
-        
-    invalid_char = '+-*/@$%^&=<>~.;'
-    if option == "underscore":
-        table = string.maketrans(invalid_char, '_'*len(invalid_char))    # 2系はstr.maketransではなくstring.maketrans, 辞書で与えることはできず変換前-後の２つの文字列を渡す
-        s_new = name.translate(table)
-        if s_new[0].isdigit():
-            s_new = "_" + s_new[1:]
-        return s_new
+def EusHash(d={}, test="equal"):
+    # test-functionをeqからequalに変えていることに注意。Pythonで辞書のキーは文字列であるため。
+    if not isinstance(d, dict):
+        raise TypeError("EusHash takes a dictionary as an argument. got {}".format(d))
+    if test not in ['eq', 'eql', 'equal']:
+        raise TypeError("EusHash takes 'eq' or 'eql' or 'equal' as a test function. got {}".format(test))
+    filling = ""
+    func_string = "#'" + test
+    for key, value in d.items():
+        filling += '(setf (gethash "{}" hsh) {})'.format(key, _translate_tuple((value, ), unfreeze=True))
+    command = "(let ((hsh (make-hash-table :test {}))) (progn {}) hsh)".format(func_string, filling)
+    proxy = eval_foreign_vm_proxy(command)
+    return proxy
+
+# 以下のようなコンテナ型は、'({})でリテラル表現を作り送り込むと '(((lookup-registered-object ...) . 100))のように送られてしまう。
+# proxyを取得するS式部分は評価させるために、適切に ` と , でunfreezeさせる必要がある
+# _translateのところで(lookup-...)の前に毎回 , をぶち込むように指定して、これらのコンストラクタのeus_prefixは ' ではなく ` にする
+#  ` は何もなかったら ' と同ななので完全に ` を採用してOK. unfreezeさせる , は ` とセットである必要がある。毎回unfreeze=Trueと指定して、_translate_tupleの方で臨機応変に , をつけるか判断するようにする
+def EusCons(sequence=[]):
+    if not isinstance(sequence, (list, tuple)):
+        raise TypeError("EusCons takes a sequence (list or tuple) as an argument. got {}".format(sequence))
+    eus_prefix = "`"
+    python_literal = sequence
+    if len(python_literal) == 0 or len(python_literal) == 1:
+        proxy =  eval_foreign_vm_proxy('({})'.format(_translate_tuple(t=tuple(python_literal), unfreeze=True, recursive=True)))
     else:
-        raise TypeError("Currently, only 'underscore' is allowed as an option argument.")
+        car = _translate_tuple(t=python_literal[:-1], unfreeze=True, recursive=True) 
+        cdr = _translate_tuple(t=python_literal[-1:], unfreeze=True, recursive=True)    # tにリストがバインドされるのがポイント([-1]じゃだめ)
+        proxy = eval_foreign_vm_proxy(eus_prefix + '({} . {})'.format(car, cdr) + " ")     # socketの向こう側では(read)で待機している。S式の塊がわかるようスペースをぶちこむ
+    return proxy
+
+
+def EusList(sequence=[]):
+    if not isinstance(sequence, (list, tuple)):
+        raise TypeError("EusPlist takes a sequence (list or tuple) as an argument. got {}".format(sequence))
+    eus_prefix = "`"
+    python_literal = sequence
+    proxy = eval_foreign_vm_proxy(eus_prefix + '({})'.format(_translate_tuple(t=python_literal, unfreeze=True, recursive=True)) + " ")    # socketの向こう側では(read)で待機している。S式の塊がわかるようスペースをぶちこむ
+    return proxy
+
+
+def EusPlist(sequence=[[None, None]]):
+    # '((indicator1 . 100) (indicator2 . 200))のようなものを作るにはEusSymを内部で使うようにする。
+    if not isinstance(sequence, (list, tuple)):
+        raise TypeError("EusPList takes a sequence (list or tuple) as an argument. got {}".format(sequence))
+    if not all(map(lambda x: len(x) == 2, sequence)):
+        raise SyntaxError("The shape of property list should be (n, 2). got {}".format(sequence))
+    eus_prefix = "`"
+    python_literal = sequence
+    pairs = ''
+    for pair in python_literal:
+        car = _translate_tuple(t=pair[:1], unfreeze=True, recursive=True)    # スライスにより、tにリストがバインドされるのがポイント([0]じゃだめ)
+        cdr = _translate_tuple(t=pair[1:], unfreeze=True, recursive=True)
+        pairs += '({} . {})'.format(car, cdr)
+    plist = eus_prefix + "({})".format(pairs)
+    proxy = eval_foreign_vm_proxy("(make-instance propertied-object :plist {})".format(plist))
+    return proxy
+
+
+def EusArray(sequence=[]):
+    # arrayは次元のそろったlistやvectorのコンテナとなる。#Aではなくmake-array関数を使用したい。が、EusListやEusIntVecといったproxyを引数にとってきたときに次元を数えるのが難しい。次元がないとdimの指定ができない。
+    # #aスタイルだと次元が揃っていないとarrayが作れないが、make-array関数は適切にnilで要素を拡張する上にリストを適切に「無視する」( (make-array '(2 3) :initial-contents '((1 2 3) (4 (5) 6))) とかなら[1][1]は (5) となる。)
+    # check-proper-dimention関数を用いて(貪欲に)生成可能な次元を特定する。
+    if not isinstance(sequence, (list, tuple)):
+        raise TypeError("EusArray takes a sequence (list or tuple) as an argument. got {}".format(sequence))
+    if sequence == []:
+        eus_prefix = "#A"
+        proxy = eval_foreign_vm_proxy(eus_prefix + '()' + " ")    # socketの向こう側では(read)で待機している。S式の塊がわかるようスペースをぶちこむ
+    else:
+        list_proxy = EusList(sequence)
+        dim_list_proxy = eval_foreign_vm_proxy("(check-proper-dimention nil {})".format(_translate_tuple(t=(list_proxy, ), unfreeze=False, recursive=True)))
+        proxy = eval_foreign_vm_proxy("(make-array {} :initial-contents {})".format(_translate_tuple(t=(dim_list_proxy, ), unfreeze=False, recursive=True), _translate_tuple(t=(list_proxy, ), unfreeze=False, recursive=True)))    
+    return proxy
+
+
+def EusVec(sequence=[]):
+    if not isinstance(sequence, (list, tuple)):
+        raise TypeError("EusVec takes a sequence (list or tuple) as an argument. got {}".format(sequence))
+    eus_prefix = "#"
+    python_literal = sequence        
+    proxy = eval_foreign_vm_proxy(eus_prefix + '({})'.format(_translate_tuple(t=python_literal, unfreeze=False, recursive=True)) + " ")    # socketの向こう側では(read)で待機している。S式の塊がわかるようスペースをぶちこむ
+    return proxy
+
+
+def EusIntVec(sequence=[]):
+    if not isinstance(sequence, (list, tuple)):
+        raise TypeError("EusIntVec takes a sequence (list or tuple) as an argument. got {}".format(sequence))
+    if not all(map(lambda x: isinstance(x, (int, long)) or x is None, sequence)):
+        raise SyntaxError("Integer expected as an element. got {}".format(sequence))
+    eus_prefix = "#I"
+    python_literal = sequence        
+    proxy = eval_foreign_vm_proxy(eus_prefix + '({})'.format(_translate_tuple(t=python_literal, unfreeze=False, recursive=True)) + " ")     # socketの向こう側では(read)で待機している。S式の塊がわかるようスペースをぶちこむ
+    return proxy
+
+
+def EusFloatVec(sequence=[]):
+    if not isinstance(sequence, (list, tuple)):
+        raise TypeError("EusFloatVec takes a sequence (list or tuple) as an argument. got {}".format(sequence))
+    if not all(map(lambda x: isinstance(x, float) or x is None, sequence)):
+        raise SyntaxError("Float expected as an element. got {}".format(sequence))
+    eus_prefix = "#F"
+    python_literal = sequence        
+    proxy = eval_foreign_vm_proxy(eus_prefix + '({})'.format(_translate_tuple(t=python_literal, unfreeze=False, recursive=True)) + " ")    # socketの向こう側では(read)で待機している。S式の塊がわかるようスペースをぶちこむ
+    return proxy
+
+
+def EusBitVec(sequence=[]):
+    if not isinstance(sequence, (list, tuple)):
+        raise TypeError("EusBitVec takes a sequence (list or tuple) as an argument. got {}".format(sequence))
+    if not all(map(lambda x: x == 0 or x == 1 or x is None, sequence)):
+        raise SyntaxError("0 or 1 expected as an element. got {}".format(sequence))
+    eus_prefix = "#*"
+    python_literal = sequence
+    # bit-vectorだけリテラルが #*1010のような表記であることに留意    
+    proxy = eval_foreign_vm_proxy(eus_prefix + '{}'.format("".join(map(lambda b: str(b), python_literal))) + " ")    # socketの向こう側では(read)で待機している。S式の塊がわかるようスペースをぶちこむ
+    return proxy
+
+
+def EusPath(name='/'):
+    if not isinstance(name, str):
+        raise TypeError("EusPath takes a string as an argument. got {}".format(name))
+    eus_prefix = "#P"
+    python_literal = name
+    proxy = eval_foreign_vm_proxy(eus_prefix + '"{}"'.format(python_literal) + " ")    # socketの向こう側では(read)で待機している。S式の塊がわかるようスペースをぶちこむ
+    return proxy
+
+
+######################################
+#### 型変換を自動化するための関数 ####
+######################################
+
+# 許容される型コンストラクタの一覧。set_params関数で変なコンストラクタを指定されないようにするために使う。
+valid_constructor = (EusSym, EusFuncSym, EusStr, EusHash, EusCons, EusList, EusPlist, EusArray, EusVec, EusIntVec, EusFloatVec, EusBitVec, EusPath)
+
+
+def set_params(pkg_obj, changed_func_name, *arg_constructors, **kwarg_constructors):
+    """
+    changed_func_nameと結び付けられているEuslisp wraper関数を、内部で引数に対しconstructorを噛ましてから送り込むEuslisp wrapper関数へと上書きする。
+    
+    Args:
+        pkg_obj (Eus_pkg): 型指定を行いたい関数の存在するパッケージ (eus_packなど)
+        changed_func_name (str): 型指定を行いたい関数のPythonでの表記 ('some_func'など)
+        arg_constructors (tuple): その関数の引数に対応したコンストラクタ関数のタプル
+        kwarg_constructors (dict): その関数の引数に対応したコンストラクタ関数のディクショナリ
+    
+    Raises:
+        TypeError: 適切なコンストラクタが渡されていないとき (package.EusListなどと表記する必要があることに注意)
+        NameError: 指定された関数名をこのパッケージから発見できなかったとき
+    """
+    global valid_constructor
+    if not all(map(lambda x: x in valid_constructor, arg_constructors)) or not all(map(lambda x: x in valid_constructor, kwarg_constructors.values())):
+        raise TypeError("args shoud be one of the constructor in  {}. got {} {}".format(valid_constructor, arg_constructors, kwarg_constructors.values()))
+
+    if changed_func_name in pkg_obj._functable:
+        # func_name = pkg_obj._from_changed_to_default_func_name[changed_func_name]
+        pkg_obj._functable[changed_func_name].arg_constructors = list(arg_constructors)    # tuple -> list
+    elif changed_func_name in pkg_obj.func._inner_functable:
+        # func_name = pkg_obj._from_changed_to_default_func_name[changed_func_name]
+        pkg_obj.func._inner_functable[changed_func_name].kwarg_constructors = kwarg_constructors
+    else:
+        raise NameError("cannot find the function named {} in package {}.".format(changed_func_name, pkg_obj._pkg))
 
 
 
+###############################################
+#### Proxy関連 (主にEus_pkg内で使用される) ####
+###############################################
 class Eus_proxy(object):
     """
     全てのプロキシクラス共通の基底クラス
@@ -967,7 +751,6 @@ class Eus_proxy(object):
         return eval_foreign_vm_copy("(lookup-registered-object {})".format(self.key_num))
 
 
-
 def _make_proxy_class(pkg, class_name, option):
     """
     make_eus_instance()から呼ばれるEus_pkgクラスコンストラクタにて、eusのクラス名のエントリからプロキシクラスを作成する際の補助関数。(コンテキストマネージャ内なのでstring-copy-modeであることが保証される)
@@ -981,11 +764,11 @@ def _make_proxy_class(pkg, class_name, option):
     """
     field = {}
     field['class_name'] = class_name
-    changed_class_name = _change_valid_name(pkg, class_name, option)
+    changed_class_name = util.change_valid_name(pkg, class_name, option)
 
     method_list = map(lambda s: s[1:], eval_foreign_vm_copy("(mapcar #'car (send {} :all-methods))".format(class_name)))    # [":prin1", ":super",...]のように:がメソッド名の先頭についている形でくる。python2ではmapはリストを返す
     for method_name in method_list:
-        changed_method_name = _change_valid_name(pkg, method_name, option)
+        changed_method_name = util.change_valid_name(pkg, method_name, option)
         field[changed_method_name] = _make_wrapper_method(method_name)
 
     return type(changed_class_name, (Eus_proxy, ), field)    # type(クラス名, 親クラス, 辞書)でクラス生成    # changed_class_nameなるクラス名で登録してシンボルとして適当であるようにする。本当の名前が知りたくなったらself.class_nameに聞けばよい
@@ -1019,33 +802,44 @@ def _make_wrapper_func(func_name):
         wrapper (function): 複数引数, キーワード引数を適切にEuslispで処理可能な形で変換しS式を送り込む処理を行う関数
     """
     def wrapper(*args, **kwargs):
-        return eval_foreign_vm_proxy('({}{})'.format(func_name, _translate_args(args, kwargs)))
-
+        # TODO: checking phase here
+    
+        # mapping phase
+        if len(args) == len(wrapper.arg_constructors):
+            args = tuple([constructor(arg) if not isinstance(arg, Eus_proxy) and constructor is not None else arg for arg, constructor in zip(args, wrapper.arg_constructors)])    # wrapper.arg_constructorsの要素constructorがNoneであることもある。下記logging phaseを見よ
+        if len(kwargs) == len(wrapper.kwarg_constructors):
+            kwargs = {key:(wrapper.kwarg_constructors[key](kwargs[key]) if not isinstance(kwargs[key], Eus_proxy) else kwargs[key]) for key in wrapper.kwarg_constructors}
+        
+        # evaluation phase
+        result = eval_foreign_vm_proxy('({}{})'.format(func_name, _translate_args(args, kwargs)))
+        
+        # logging phase (ここに来ている時点でevaluation phaseにてEusErrorは投げられていないことがわかる。今回の型は正当である)
+        # logging時にargの要素やkwargのvalueがproxyでなかった場合(つまりデフォルトルールでの変換が行われた場合)、Noneをarg_constructorsに登録する
+        # proxyのクラスからコンストラクタを特定する上で、nil-terminated cons vs. non-nil-terminated consの競合が発生する。使用頻度を考えてEusListの方であろうと決め打ちを行うことにする!
+        # for ind, elm in enumerate(args):
+        #     if isinstance(elm, Eus_proxy):
+        #         pass
+        #     else:
+        #         pass
+        # for ind, key in enumerate(kwargs):
+        #     if isinstance(key, Eus_proxy):
+        #         pass
+        #     else:
+        #         pass
+        return result
+    
+    wrapper.arg_constructors = []
+    wrapper.kwarg_constructors = {}
+    wrapper.arg_possible_types = []
+    wrapper.kwarg_possible_types = {}
     return wrapper
 
 
-def _make_wrapper_func_with_type(func_name, *constructor_args, **constructor_kwargs):
-    """
-    set_paramsメソッドから呼び出される関数。代替となるwrapper functionを生成して返す。
+##################################################
+#### 他言語関数引数部を作成するための補助関数 ####
+##################################################
 
-    Args:
-        func_name (str): もとのEuslispでの関数名でpkg::を含む。なお、関数は内部シンボルと仮定している。(exportされてたら外部シンボルアクセス:(1個)を使わないとならない)。
-        constructor_args (tuple): その関数の引数にデフォルトで適用するコンストラクタのタプル
-        constructor_kwargs (dict): その関数の引数にデフォルトで適用する、引数と対応したコンストラクタのディクショナリ  
-    Returns:
-        wrapper (function): 複数引数, キーワード引数を適切にEuslispで処理可能な形で変換しS式を送り込む処理を行う関数
-    """
-    def wrapper(*args, **kwargs):
-        assert len(args) == len(constructor_args) and len(kwargs) == len(constructor_kwargs) and kwargs.keys()==constructor_kwargs.keys()
-        L = [constructor(arg) if not isinstance(arg, Eus_proxy) else arg for arg, constructor in zip(args, constructor_args)]
-        d = {key:(constructor_kwargs[key](kwargs[key]) if not isinstance(kwargs[key], Eus_proxy) else kwargs[key]) for key in constructor_kwargs}
-        return eval_foreign_vm_proxy('({}{})'.format(func_name, _translate_args(tuple(L), d)))
-    
-    return wrapper
-    
-
-
-def _translate_args(t=tuple(), d=dict()):
+def _translate_args(t=tuple(), d=dict(), unfreeze=False):
     """
     _make_wrapper_argsでラッパー関数を作成する際の補助関数。
     関数呼び出しを行うS式の引数部分に埋め込む文字列を作成する。
@@ -1065,11 +859,11 @@ def _translate_args(t=tuple(), d=dict()):
 
     >>> L = ((1,2),(3,4))
     >>> _translate_args(t=L)
-    ' (quote (1 2)) (quote (3 4))'
+    ' `(1 2) `(3 4)'
 
     >>> L2 = (((1,2),(3,4)),)
     >>> _translate_args(t=L2)
-    ' (quote ((1 2) (3 4)))'
+    ' `((1 2) (3 4))'
 
     >>> val1, val2 = 5, 10
     >>> _translate_args(d={"a":val1, "b":val2})
@@ -1077,7 +871,7 @@ def _translate_args(t=tuple(), d=dict()):
 
     >>> nested_list_dict = {"key":[1,[2,[3]]]}
     >>> _translate_args(d=nested_list_dict)
-    ' :key (quote (1 (2 (3))))'
+    ' :key `(1 (2 (3)))'
 
     >>> _translate_args(t=(1, 2), d={"x":3, "y":4})
     ' 1 2 :y 4 :x 3'
@@ -1085,37 +879,39 @@ def _translate_args(t=tuple(), d=dict()):
     >>> pi = 3.14
     >>> t, d = (("ho", "ge", pi), 1), {"x":3, "y":(4, 5)}
     >>> _translate_args(t, d)
-    ' (quote ("ho" "ge" 3.14)) 1 :y (quote (4 5)) :x 3'
-
+    ' `("ho" "ge" 3.14) 1 :y `(4 5) :x 3'
 
     Args:
-        最初の呼び出しは(args, kwargs)を想定している。argsは関数呼び出し時に*argsにバインドされたタプル, kwargsは関数呼び出し時に**kwargsにバインドされたディクショナリ
+        最初の呼び出しは(args, kwargs)を想定している。argsは関数呼び出し時に*argsにバインドされたタプル, kwargsは関数呼び出し時に**kwargsにバインドされたディクショナリ。
+        unfreeze=Trueのときはproxyに対応する (lookup-registered-object ...) なるS式の前に , がついてunfreezeされるようになる。(型コンストラクタの引数でさらにproxyが入ってきたときのための実装)
         t (tuple or list)
         d (dictionary)
+        unfreeze (bool)
     Returns:
         str: 関数呼び出しを行うS式の引数部分に埋め込む文字列
     Raises:
         TypeError: 自動的な型変換に失敗した時 (ユーザー定義Pythonクラスインスタンスが引数としてとられていたときなど)
     """
-    return '{}{}'.format(_translate_tuple(t), _translate_dict(d))
+    return '{}{}'.format(_translate_tuple(t, unfreeze), _translate_dict(d, unfreeze))
 
 
-def _translate_tuple(t, recursive=False):
+def _translate_tuple(t, unfreeze, recursive=False):
     """
     引数のタプルをよしなに変換する(シンボルは評価される)。再帰呼出しからは(quote )が付加される。
+    _translate_dict関数同様、関数引数の通常引数を処理するためのものだが、リストの再帰構造を処理するのにも便利であるため転用している。
 
-    >>> _translate_tuple(tuple())
+    >>> _translate_tuple(tuple(), False)
     ''
 
     # 空のリストを引数に関数呼び出しをするとき。tは空のリスト1要素を持つタプルなので以下のようになる。Euslispでは空リストとして評価される。
-    >>> _translate_tuple(([], ))    
-    ' (quote ())'
+    >>> _translate_tuple(([], ), False)    
+    ' `()'
 
-    >>> _translate_tuple(("a", "b", "c"))
+    >>> _translate_tuple(("a", "b", "c"), False)
     ' "a" "b" "c"'
 
-    >>> _translate_tuple((1, [2, 3], [4, [5, 6]]))
-    ' 1 (quote (2 3)) (quote (4 (5 6)))'
+    >>> _translate_tuple((1, [2, 3], [4, [5, 6]]), False)
+    ' 1 `(2 3) `(4 (5 6))'
     """
     s = ''
     for ind, elm in enumerate(t):
@@ -1129,17 +925,28 @@ def _translate_tuple(t, recursive=False):
         elif elm is True:
             s += 't'
         elif isinstance(elm, str):
-            s += '"{}"'.format(elm)                 
+            s += '"{}"'.format(elm)
+        # デフォルトマッピングでEuslsipのlistになるやつらのとき
+        # EusListとかの内部でこの_translate_tupleを使用しているのでここを',(lookup-registered-object {})'.format(EusList(elm).key_num)とかに置き換えるのはNG
         elif isinstance(elm, (list, tuple, xrange)):
             if recursive:
-                s += '({})'.format(_translate_tuple(t=elm, recursive=True))
+                s += '({})'.format(_translate_tuple(t=elm, unfreeze=unfreeze, recursive=True))
             else:
-                s += '(quote ({}))'.format(_translate_tuple(t=elm, recursive=True))
+                # s += '(quote ({}))'.format(_translate_tuple(t=elm, unfreeze=unfreeze, recursive=True))
+                s += '`({})'.format(_translate_tuple(t=elm, unfreeze=True, recursive=True))    # (quote ({}))ではなくbackquote version. [EusCons, EusCons]みたいなやつらを変換する際にしっかりunfreezeしてやる
+        # デフォルトマッピングでEuslispのhashtableになるやつらのとき
+        elif isinstance(elm, dict):
+            filling = ""
+            for key, value in elm.items():
+                filling += '(setf (gethash "{}" hsh) {})'.format(key, _translate_tuple((value, ), unfreeze))
+            s += "(let ((hsh (make-hash-table :test #'equal))) (progn {}) hsh)".format(filling)    # Pythonでは辞書のキーは文字列であるため
         # Eus_proxyを継承したclass objectのとき
         elif type(elm) == type and "Eus_proxy" in map(lambda x: x.__name__, elm.__bases__):    # issubclass()はクラスがグローバルに登録されていないので使えない
             s += '{}'.format(elm.class_name)
         # Eus_proxyを継承したclassのinstanceのとき
         elif isinstance(elm, Eus_proxy):
+            if unfreeze:
+                s += ','    # 適宜, によりunfreezeするのが大切。そうでないとEusList(EusSym, EusSym)とかでこのS式が評価されぬまま残ってしまう
             s += '(lookup-registered-object {})'.format(elm.key_num)
         # 関数のとき
         elif callable(elm):
@@ -1150,24 +957,25 @@ def _translate_tuple(t, recursive=False):
             global_callback_table[callback_key] = elm
             send_sexp("(generate-callback-function {})".format(callback_key), 'n')    # マクロ呼び出し。Euslisp側に pyfunc1といった関数がdefunされる。responseは必要ないので'n'モードで。
             s += "#'{}".format(callback_key)
-
         else:
             raise TypeError("The type of the argument in the sequence cannot be converted automatically. got {} (type {})".format(elm, type(elm)))
     return s
 
 
-def _translate_dict(d):
+def _translate_dict(d, unfreeze):
     """
     引数の辞書をよしなに変換する(シンボルは評価される)。
+    これはLispにおける関数のkeyword引数であって、hashtableオブジェクトとはなんら関係がない。
+    引数にハッシュテーブルのリストなどが来たからと言ってこの関数が呼ばれるわけではない。
 
-    >>> _translate_dict(dict())
+    >>> _translate_dict(dict(), False)
     ''
 
-    >>> _translate_dict({"a":1, "b":2})
+    >>> _translate_dict({"a":1, "b":2}, False)
     ' :a 1 :b 2'
 
-    >>> _translate_dict({"1": [1,2,3], "2":[4,5,6]})
-    ' :1 (quote (1 2 3)) :2 (quote (4 5 6))'
+    >>> _translate_dict({"1": [1,2,3], "2":[4,5,6]}, False)
+    ' :1 `(1 2 3) :2 `(4 5 6)'
     """
     s = ''
     for key, val in d.items():
@@ -1180,15 +988,24 @@ def _translate_dict(d):
         elif val is True:
             s += ':{} t'.format(key)
         elif isinstance(val, str):
-            s += ':{} "{}"'.format(key, val)            
+            s += ':{} "{}"'.format(key, val)
+        # デフォルトマッピングでEuslispのlistになるやつらのとき
         elif isinstance(val, (list, tuple, xrange)):
-            s += ':{} (quote ({}))'.format(key, _translate_tuple(t=val, recursive=True))    # _translate_dictは再帰呼出しされることはないので(Euslispにハッシュテーブルのリテラル表現がない以上送るのを諦めている。)revursiveチェックは不要。
+            # s += ':{} (quote ({}))'.format(key, _translate_tuple(t=val, unfreeze=unfreeze, recursive=True))    # _translate_dictは再帰呼出しされることはないためrecursiveチェックは不要。
+            s += ':{} `({})'.format(key, _translate_tuple(t=val, unfreeze=True, recursive=True))    # _translate_dictは再帰呼出しされることはないためrecursiveチェックは不要。 # backquote version
+        # デフォルトマッピングでEuslispのhashtableになるやつらのとき
+        elif isinstance(val, dict):
+            filling = ""
+            for py_key, py_value in val.items():
+                filling += '(setf (gethash "{}" hsh) {})'.format(py_key, _translate_tuple((py_value, ), unfreeze))
+            s += ":{} (let ((hsh (make-hash-table :test #'equal))) (progn {}) hsh)".format(key, filling)    # このkeyはキーワード引数のキー
         # Eus_proxyを継承したclass objectのとき
         elif type(val) == type and "Eus_proxy" in map(lambda x: x.__name__, val.__bases__):
             s += ':{} {}'.format(key, val.class_name)
         # Eus_proxyを継承したclassのinstanceのとき
         elif isinstance(val, Eus_proxy):
-            s += ':{} (lookup-registered-object {})'.format(key, val.key_num)
+            unfreeze_option = ',' if unfreeze else ''
+            s += ':{} {}(lookup-registered-object {})'.format(key, unfreeze_option, val.key_num)
         # 関数のとき
         elif callable(val):
             global global_callback_key_count
@@ -1198,36 +1015,9 @@ def _translate_dict(d):
             global_callback_table[callback_key] = val
             send_sexp("(generate-callback-function {})".format(callback_key), 'n')    # マクロ呼び出し。Euslisp側に pyfunc1といった関数がdefunされる。responseは必要ないので'n'モードで。
             s += ":{} #'{}".format(key, callback_key)
-
         else:
             raise TypeError("The type of the value in the dictionary cannot be converted automatically. got {} (type {})".format(val, type(val)))
     return s
-
-
-
-###################
-#### for debug ####
-###################
-def my_assert(actual, expected):
-    """
-    何番目のテストケースが通って何番目のテストケースが死んだのかを表示するデバッグ用関数
-    """
-    # static変数ライクに使うために関数オブジェクトの属性に登録してしまう
-    if not hasattr(my_assert, 'count_iter'):
-        my_assert.count_iter = 0
-        my_assert.count_passed = 0
-        my_assert.count_error = 0
-        my_assert.error_list = []
-
-    my_assert.count_iter += 1
-
-    if actual == expected:
-        print("*test{} passed.* (actual={}, expected={})\n".format(my_assert.count_iter, actual, expected))
-        my_assert.count_passed += 1
-    else:
-        print >> sys.stderr, "***test{} failed!*** (actual={}, expected={})\n".format(my_assert.count_iter, actual, expected)
-        my_assert.count_error += 1
-        my_assert.error_list.append(my_assert.count_iter)
 
 
 

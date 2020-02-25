@@ -82,6 +82,10 @@
 (defun str-arg-ret-0 (str)
   (format nil "~c" (char str 0)))
 
+(defun consult-hash-with-key (hashtab key)
+  ; 普通引数として辞書を受け取る関数。_translate_tupleの内部の辞書の処理のチェック用
+  (when (hash-table-p hashtab) (gethash key hashtab)))
+
 ; 複数引数
 (defun three-args-ret-sum(a b c)
   (+ a b c))
@@ -99,6 +103,10 @@
 ; キーワード引数
 (defun keyword-args-ret-int(&key a b c)
   (+ (* 3 a) (* 2 b) c))
+
+(defun hash-in-keyword-args(&key hash key)
+  ; キーワード引数として辞書を受け取る関数。_translate_dictの内部の辞書の処理のチェック用
+  (when (hash-table-p hash) (gethash key hash)))
 
 
 ; 複数引数とキーワード引数の合わせ技
@@ -131,8 +139,8 @@
 
 
 ;;; 明確な型指定をpython側から行えないとパスできない関数たちのテスト
-(defun dot-cons-p (cons)
-  (listp (cdr cons)))
+(defun dot-cons-p (dot-cons)
+  (listp (cdr dot-cons)))
 
 (defun access-symbol (sym)
   ; 'const-piなどの引数で呼ばれる
@@ -154,14 +162,13 @@
       (elt fv 0)))
 
 (defun bit-vec-arg-ret-0 (bv)
-  (if (bit-vector-p bv)
-      (bit bv 0)))
+  (bit bv 0))
 
 (defun pathname-arg-ret-file-str (path)
-  (if (pathnamep path)
-      (pathname-name path)))
+      (pathname-name path))
 
 
+;;; ---------------------------------------------
 ;;; socketが遅い理由をチェックするための調査関数
 ;;; 4092バイトの文字列を返す。python側からはまず4バイトの数値でデータサイズを受取り、次に4092バイト以上の任意のサイズを読み込もうとすると、4096-4=4092バイト読みこんでおしまいになるため、
 ;;; 1回の読み込みで必ず終了する。もし毎回4096バイトずつ読み込んでおり、読み込み待ちタイムアウトなどが悪さをしている場合これは高速になるはず。
@@ -172,6 +179,7 @@
 
 (defun socket-check ()
   str-4090)
+;;; ---------------------------------------------
 
 
 (in-package "USER")

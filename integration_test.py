@@ -8,8 +8,8 @@ You can use all functions inside the library just to put 'import pyeus' at the b
 
 import os, sys
 import pyeus
-from pyeus import my_assert
-
+from pyeus_util import my_assert, EusError
+from pyeus import EusSym, EusFuncSym, EusStr, EusHash, EusCons, EusList, EusPlist, EusArray, EusVec, EusIntVec, EusFloatVec, EusBitVec, EusPath
 
 def mainloop():
     print("--python code--\n")
@@ -18,7 +18,7 @@ def mainloop():
         print("start integration test...!")
 
 
-        #### :test package
+        #### inside :test package
         src = os.path.join(os.getcwd(), "functions_for_integration_test.l")
         pyeus.load_library(src=src, module_name=":test")
 
@@ -85,6 +85,7 @@ def mainloop():
         my_assert(eus_pack.original_nest([1,2,3]).to_python(), [1,[2,3]])
         my_assert(eus_pack.original_nest([1,2,[3]]).to_python(), [1,[2,[3]]])
         my_assert(eus_pack.str_arg_ret_0("some text here").to_python(), "s")
+        my_assert(eus_pack.consult_hash_with_key({"moo":100, "bow":200}, "moo"), 100)
 
         # 複数引数
         my_assert(eus_pack.three_args_ret_sum(1, 2, 3), 6)
@@ -105,6 +106,7 @@ def mainloop():
         my_assert(eus_pack.keyword_args_ret_int(c=3, b=2, a=1), 10)
         x = 3
         my_assert(eus_pack.keyword_args_ret_int(a=1, b=2, c=x), 10)
+        my_assert(eus_pack.hash_in_keyword_args(hash={"a":"this is A!", "b":"this is B!"}, key="b").to_python(), "this is B!")
         
         # 複数引数とキーワード引数の合わせ技
         my_assert(eus_pack.int_list_keyword_args_ret_int(1, [2, 3, 4], a=1, b=2, c=3), 20)    # 1 + 2 + 3 + 4 + 3a +2b +c
@@ -193,77 +195,89 @@ def mainloop():
         print("-"*28)
 
         # そもそも型変換後のオブジェクトが正しい挙動をするか
-        my_assert(eus_pack.EusSym("a").to_python(), "test::a")    # 'TEST::aを作れという形で文字列を送るが、evalするとtest::aという出力形式になる。パッケージ名は小文字で表示される。
-        my_assert(eus_pack.EusFuncSym("cons").to_python().startswith("#<compiled-code"), True)
-        my_assert(eus_pack.EusStr("moo").to_python(), "moo")
-        my_assert(eus_pack.EusHash({'a':1}).to_python(), {'a':1})
-        my_assert(eus_pack.EusCons([0,0,0]).to_python(), [0,0,0])
-        my_assert(eus_pack.EusList([10, [100], [[1000]]]).to_python(), [10, [100], [[1000]]])
-        my_assert(eus_pack.EusPlist([['a', 1], ['b', 2], ['c', 3]]).to_python(), [['a', 1], ['b', 2], ['c', 3]])
-        my_assert(eus_pack.EusArray([1, 2, 3, 4, 5]).to_python(), [1, 2, 3, 4, 5])
-        my_assert(eus_pack.EusVec(('a', 'b')).to_python(), ['a', 'b'])
-        my_assert(eus_pack.EusIntVec([1, 2, 3, 4]).to_python(), [1, 2, 3, 4])
-        my_assert(eus_pack.EusFloatVec([1.0, 2.0, 3.0]).to_python(), [1.0, 2.0, 3.0])
-        my_assert(eus_pack.EusBitVec([1, 1, 0, 0]).to_python(),[1, 1, 0, 0])
-        my_assert(eus_pack.EusPath("/bin/").to_python(), "/bin/")
+        my_assert(EusSym("test", "a").to_python(), "test::a")    # 'TEST::aを作れという形で文字列を送るが、evalするとtest::aという出力形式になる。パッケージ名は小文字で表示される。
+        my_assert(EusFuncSym("test", "cons").to_python().startswith("#<compiled-code"), True)
+        my_assert(EusStr("moo").to_python(), "moo")
+        my_assert(EusHash({'a':1}).to_python(), {'a':1})
+        my_assert(EusCons([0,0,0]).to_python(), [0,0,0])
+        my_assert(EusList([10, [100], [[1000]]]).to_python(), [10, [100], [[1000]]])
+        my_assert(EusPlist([['a', 1], ['b', 2], ['c', 3]]).to_python(), [['a', 1], ['b', 2], ['c', 3]])
+        my_assert(EusPlist([[EusSym("test", "indicator1"), 100],[EusSym("test", "indicator2"), 200]]).get(EusSym("test", "indicator2")), 200)
+        my_assert(EusArray([1, 2, 3, 4, 5]).to_python(), [1, 2, 3, 4, 5])    # 1d
+        my_assert(EusArray([[1, 2, 3], [4, 5, 6]]).to_python(), [[1, 2, 3], [4, 5, 6]])    # 2d
+        my_assert(EusArray([[1, 2], [3]]).to_python(), [[1, 2], [3, None]])    # 2d with fill
+        my_assert(EusArray([[[1]], [[2]]]).to_python(), [[[1]], [[2]]])    # 3d
+        my_assert(EusArray([[[1, 2]], [[3]]]).to_python(), [[[1, 2]], [[3, None]]])    # 3d with fill
+        my_assert(EusArray([[[[1, 2], [3, 4]], [[5, 6], [7, 8]]], [[[9], [10]], [[11], [12]]]]).to_python(), [[[[1, 2], [3, 4]], [[5, 6], [7, 8]]], [[[9, None], [10, None]], [[11, None], [12, None]]]])    # 4d with fill
+        my_assert(EusVec(('a', 'b')).to_python(), ['a', 'b'])
+        my_assert(EusIntVec([1, 2, 3, 4]).to_python(), [1, 2, 3, 4])
+        my_assert(EusFloatVec([1.0, 2.0, 3.0]).to_python(), [1.0, 2.0, 3.0])
+        my_assert(EusBitVec([1, 1, 0, 0]).to_python(),[1, 1, 0, 0])
+        my_assert(EusPath("/bin/").to_python(), "/bin/")
 
         # デフォルト値があるものに関しては、そのデフォルト値が正しく動作するか
-        my_assert(eus_pack.EusStr().to_python(), "")
-        my_assert(eus_pack.EusHash().to_python(), {})
-        my_assert(eus_pack.EusCons(), None)    # () => nilよりこれが仕様
-        my_assert(eus_pack.EusList(), None)
-        my_assert(eus_pack.EusPlist().to_python(), [[None]])    # ((nil . nil)) => ((nil))よりこれが仕様。
-        my_assert(eus_pack.EusArray().to_python(), [])
-        my_assert(eus_pack.EusVec().to_python(), [])
-        my_assert(eus_pack.EusIntVec().to_python(), [])
-        my_assert(eus_pack.EusFloatVec().to_python(), [])
-        my_assert(eus_pack.EusBitVec().to_python(), [])
-        my_assert(eus_pack.EusPath().to_python(), "/")    
+        my_assert(EusStr().to_python(), "")
+        my_assert(EusHash().to_python(), {})
+        my_assert(EusCons(), None)    # () => nilよりこれが仕様
+        my_assert(EusList(), None)
+        my_assert(EusPlist().to_python(), [[None]])    # ((nil . nil)) => ((nil))よりこれが仕様。
+        my_assert(EusArray().to_python(), [])
+        my_assert(EusVec().to_python(), [])
+        my_assert(EusIntVec().to_python(), [])
+        my_assert(EusFloatVec().to_python(), [])
+        my_assert(EusBitVec().to_python(), [])
+        my_assert(EusPath().to_python(), "/")
 
+        # コンテナ型(EusCons, EusList, EusPlist, EusArray, EusVec)に関しては、引数部にproxy objectが入っていても正しく動作するか
+        my_assert(EusCons([EusList([1,2,3]), [4,5,6]]).to_python(), [[1,2,3],4,5,6])    # (cons '(1 2 3) '(4 5 6)) -> '((1 2 3) 4 5 6)に注意
+        
 
         # 引数symbol (str to symbol)
-        my_assert(eus_pack.access_symbol(eus_pack.EusSym("const-pi")), 3.1415)    # 'const-piが関数に渡されevalされたものが返される。
+        my_assert(eus_pack.access_symbol(EusSym("test","const-pi")), 3.1415)    # 'const-piが関数に渡されevalされたものが返される。
         
         # 引数function symbol (str to symbol)
-        my_assert(eus_pack.sort([-2,-5,11,7,3,-13], eus_pack.EusFuncSym("<="), eus_pack.EusFuncSym("abs")).to_python(), [-2,3,-5,7,11,-13])
+        my_assert(eus_pack.sort([-2,-5,11,7,3,-13], EusFuncSym("test", "<="), EusFuncSym("test", "abs")).to_python(), [-2,3,-5,7,11,-13])    # 組み込み関数はどこからもアクセスできるのでpkgに"user"などを与えても良い。
 
         # 引数cons (list/tuple to cons)
         # 2.7ではrangeはlistを返す。xrangeがrangeオブジェクトを返すがこいつはスライスなどを受け付けず限定的な処理しか許されない。3.7からはサポートしても良いかも。
-        my_assert(eus_pack.dot_cons_p(eus_pack.EusCons([1, 2, 3])), True)
+        my_assert(eus_pack.dot_cons_p(EusCons([1, 2, 3])), True)
+
+        p_object = eus_pack.instantiate(eus_pack.propertied_object)
+        p_object.plist([EusCons([10, 100]), EusCons([20, 200]), EusCons([30, 300])])
+        my_assert(p_object.to_python(), [[10, 100], [20, 200], [30, 300]])
+        my_assert(p_object.get(20), 200)
+
 
         # 引数list (list/tuple to list)
         tmp = 1
-        my_assert(eus_pack.list_arg_ret_doubled_list(eus_pack.EusList([tmp, 2 ,3])).to_python(), [2, 4, 6])
+        my_assert(eus_pack.list_arg_ret_doubled_list(EusList([tmp, 2 ,3])).to_python(), [2, 4, 6])
 
         # 引数plist (2*n-list/2*n-tuple to plist)
-        p_object = eus_pack.instantiate(eus_pack.propertied_object)
-        p_object.plist(eus_pack.EusPlist([[10, 100], [20, 200], [30, 300]]))
-        my_assert(p_object.get(20), 200)
 
         # 引数array (list/tuple to array)
-        my_assert(eus_pack._d_array_arg_ret_0_0(eus_pack.EusArray([[4, 3], [2, 1]])), 4)
+        my_assert(eus_pack._d_array_arg_ret_0_0(EusArray([[4, 3], [2, 1]])), 4)
 
         # 引数vector (list/tuple to array)
-        my_assert(eus_pack.vector_arg_ret_0(eus_pack.EusVec([['a', 'b'], ['c', 'd']])).to_python(), ["a", "b"])
+        my_assert(eus_pack.vector_arg_ret_0(EusVec([['a', 'b'], ['c', 'd']])).to_python(), ["a", "b"])
 
         # 引数int-vector (list/tuple to integer vector)
-        my_assert(eus_pack.int_vec_arg_ret_0(eus_pack.EusIntVec([1, 2, 3, 4])), 1)
-        my_assert(eus_pack.int_vec_arg_ret_0(eus_pack.EusFloatVec([1.0, 2.0, 3.0, 4.0])), None)
+        my_assert(eus_pack.int_vec_arg_ret_0(EusIntVec([1, 2, 3, 4])), 1)
+        my_assert(eus_pack.int_vec_arg_ret_0(EusFloatVec([1.0, 2.0, 3.0, 4.0])), None)
 
         # 引数float-vector (list/tuple to float vector)
-        my_assert(eus_pack.float_vec_arg_ret_0(eus_pack.EusFloatVec([1.0, 2.0, 3.0, 4.0])), 1.0)
-        my_assert(eus_pack.float_vec_arg_ret_0(eus_pack.EusIntVec([1, 2, 3, 4])), None)
+        my_assert(eus_pack.float_vec_arg_ret_0(EusFloatVec([1.0, 2.0, 3.0, 4.0])), 1.0)
+        my_assert(eus_pack.float_vec_arg_ret_0(EusIntVec([1, 2, 3, 4])), None)
 
         # 引数bit-vector (0-1-list/0-1-tuple to bit-vector)
-        my_assert(eus_pack.bit_vec_arg_ret_0(eus_pack.EusBitVec([1, 0, 0, 0])), 1)
+        my_assert(eus_pack.bit_vec_arg_ret_0(EusBitVec([1, 0, 0, 0])), 1)
 
         # 引数pathname (str to pathname) 
         # 3.4からはpathlibにPathがあるのでそちらもサポートしてもよいかも
-        my_assert(eus_pack.pathname_arg_ret_file_str(eus_pack.EusPath("/opt/ros/melodic/env.sh")).to_python(), "env")
+        my_assert(eus_pack.pathname_arg_ret_file_str(EusPath("/opt/ros/melodic/env.sh")).to_python(), "env")
 
 
         # しっかり破壊的な操作をするEuslisp関数を呼んだ時プロキシオブジェクトが変更されているか(copyになっていないか)
-        L = eus_pack.EusList([1,2,3,4])
+        L = EusList([1,2,3,4])
         eus_pack.nreverse(L)
         my_assert(L.to_python(), [4,3,2,1])
 
@@ -274,22 +288,27 @@ def mainloop():
         print("# test7 -> set_params function")
         print("-"*28)
 
-        my_assert(eus_pack.bit_vec_arg_ret_0([1,0,0,1]), None)    # '(1 0 0 1)が送られてくるが、bit-vector-pで弾かれるのでnilが返り、Pythonに返される際Noneとなる
-        eus_pack.set_params("bit_vec_arg_ret_0", eus_pack.EusBitVec)
+        try:
+            eus_pack.bit_vec_arg_ret_0([1,0,0,1])    # '(1 0 0 1)が送られてくるが、(bit bv 0) でエラーとなるのでEusError
+        except Exception as e:
+            my_assert(type(e), EusError)
+        
+        pyeus.set_params(eus_pack, "bit_vec_arg_ret_0", EusBitVec)
+        my_assert(eus_pack.bit_vec_arg_ret_0.arg_constructors, [EusBitVec])
         my_assert(eus_pack.bit_vec_arg_ret_0([1,0,0,1]), 1)    # 適切に変換されていれば#*1001がEuslisp側で作られそれに対するlookup-registered-objectが送られる
         
         # 引数がすでにproxyになっていた場合は変換しないようになっているか
-        my_assert(eus_pack.bit_vec_arg_ret_0(eus_pack.EusBitVec([1,0,0,0])), 1)
+        my_assert(eus_pack.bit_vec_arg_ret_0(EusBitVec([1,0,0,0])), 1)
 
-        # 関数名を間違えいたときにエラーを正しくだすか
+        # 関数名を間違えたときにエラーを正しくだすか
         try:
-            eus_pack.set_params("bit-vec-arg-ret-0", eus_pack.EusBitVec)
+            pyeus.set_params(eus_pack, "bit-vec-arg-ret-0", EusBitVec)
         except Exception as e:
             my_assert(type(e), NameError)
 
-        # コンストラクタではなくなぞの関数を指定しているときにエラーを正しくだすか
+        # 型変換コンストラクタではない、意味不明な関数を指定しているときにエラーを正しくだすか
         try:
-            eus_pack.set_params("bit_vec_arg_ret_0", lambda x: list(x))
+            pyeus.set_params(eus_pack, "bit_vec_arg_ret_0", lambda x: list(x))
         except Exception as e:
             my_assert(type(e), TypeError)
         
@@ -300,6 +319,7 @@ def mainloop():
         print("# test8 -> callback function")
         print("-"*28)
         my_assert(eus_pack.mapcar(lambda x: eus_pack.second(x), [[1,2,3], [4,5,6], [7,8,9]]).to_python(), [2,5,8])
+        my_assert(eus_pack.mapcar(lambda x: x**2, [1,2,3,4,5]).to_python(), [1,4,9,16,25])
 
 
 
@@ -332,20 +352,6 @@ def mainloop():
         # print(type(eus_pack.EusArray([1,2,3])))
         # print(type(eus_pack.EusHash({'a':1, 'b':2})))
         # print(type(eus_pack.EusPath("/opt/")))
-
-
-
-
-        import pyeus
-        # same as (mapcar #'(lambda (x) (* x x)) '(1 2 3 4 5))
-        # callback-function is also supported!
-        result = eus_pack.mapcar(lambda x: x**2, [1,2,3,4,5])
-        print(result.to_python())    #  [1,4,9,16,25]
-
-
-
-
-
         
         print("--python code--")
         
