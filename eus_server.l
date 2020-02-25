@@ -1,17 +1,14 @@
-#|
-ここを臨機応変にいじろう!
-|#
+#| ここを臨機応変にいじろう! |#
 ;;;; デフォルト値はnil。このファイルの関数のユニットテストを行う場合はここをtにする。
 (defvar *unit-test-mode* nil)
 
 (when *unit-test-mode* (warn "Running the unit-test!~%"))
 
 
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; symbol-tableを正しく使うためにバグフィックスずみのハッシュテーブルパッケージをロード ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-(require ":BUGFIXED-HASH" "testhash.l")
+(require ":BUGFIXED-HASH" "bugfixed_hash.l")
 
 
 
@@ -29,7 +26,6 @@
 
 
 (setq default-error-handler *error-handler*)
-
 
 ;;; エラーハンドラが書き換えられているかどうか (unit test時にエラー時の挙動の調査まで行うかの判定に使用)
 (defparameter *original-error-mode* nil)
@@ -58,7 +54,6 @@
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; string copyのための関数たち ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
 
 ;;; 文字コード値を文字列へ変換するtrans関数
 ;;; Calledbyc内部だけではなく、地味にpython-like-string-from-string関数内でも使用されている
@@ -211,6 +206,7 @@
           ((null obj) (setq str "None"))
           ((eq t obj) (setq str "True"))
           ((listp obj) (setq str (python-like-string-from-list obj)))
+          ((eq (send (class obj) :name) 'propertied-object) (setq str (python-like-string-from-list (send obj :plist))))
           ((stringp obj) (setq str (python-like-string-from-string obj)))
           ((matrixp obj) (setq str (python-like-string-from-matrix obj)))
           ((vectorp obj) (setq str (python-like-string-from-vector obj)))
@@ -230,19 +226,15 @@
 
 
 
-
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; Proxy objectを返すようなモードのための関数、クラスたち ;;;
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-
 #|
 useful for debuggingと書かれたコメントは便利なので消さないようにしよう
 |#
-
 ;;; FFIで呼び出された戻り値を束縛しておく用のシンボルテーブルを管理するためのクラス
 (defclass ffi-symbols-manager :super object :slots (ffi-symbol-table symbol-count))
-(defmethod ffi-symbols-manager 
+(defmethod ffi-symbols-manager
   (:set-symbol (obj)
     (progn
       (incf symbol-count)
@@ -266,7 +258,6 @@ useful for debuggingと書かれたコメントは便利なので消さないよ
 (defun lookup-registered-object (key-num)
   "look up *ffi-symbols* table by key-num"
   (send *ffi-symbols* :get-symbol-value key-num))
-
 
 
 ;;; とりあえずグローバルな*ffi-symbols*のslotの辞書に登録をし、(鍵の数値[int] メソッドを列挙したリスト)を作成する。それをpythonで[key-num,pkg-name,cls-name]という形で受け取れるよう文字列に変換して返す。
@@ -294,6 +285,16 @@ useful for debuggingと書かれたコメントは便利なので消さないよ
 
 
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; EusArrayコンストラクタのための処理 ;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(defun check-proper-dimention (&optional buf &rest lst)    ; at first, this function should be called with an argument nil as buf
+  (setq buf (cons (apply #'max (mapcar #'length lst)) buf))
+  (let ((flattened (apply #'append lst)))    ; #'nconcだと破壊されて大変なことになる
+    (if (every #'listp flattened)
+      (apply #'check-proper-dimention (cons buf flattened))
+      (reverse buf))))
+
 
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
@@ -317,8 +318,7 @@ useful for debuggingと書かれたコメントは便利なので消さないよ
                   ((string= mode "n") (my-eval sformula))
                   ((string= mode "c") (write-to-socket *sstream* (my-eval sformula)))
                   ((string= mode "p") (write-to-socket *sstream* (my-eval-with-proxy sformula)))
-                  (t (warn "mode should be 'n' or 'c' or 'p'. got ~s~%" mode))))))))
-)
+                  (t (warn "mode should be 'n' or 'c' or 'p'. got ~s~%" mode)))))))))
 
 
 ;;; "'callback:pyfunc1 1 10 100'"といった文字列コマンドを生成する
@@ -333,6 +333,7 @@ useful for debuggingと書かれたコメントは便利なので消さないよ
     (dolist (elm values)
       (princ " " str)    ;あちらで proxy:...や値をsplit()でわけられるように空白を追加
       (princ (string-trim "'" (make-proxy elm)) str))))    ; "'proxy:...'"の "'"はいらない 
+
 
 
 

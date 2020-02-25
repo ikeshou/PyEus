@@ -1,6 +1,4 @@
-#|
-ここを臨機応変にいじろう!
-|#
+#| ここを臨機応変にいじろう! |#
 ;;; 0 → errorのみをキャッチする, 1 → passしたケースも全て出力していく。
 (defvar *debug-mode* 1)
 
@@ -20,7 +18,7 @@
             (format t "Error ~a occurred when t-checking ~a" (if (null msg) "" msg) v)
             (terpri)
             (incf *error-count*)
-            (setq *error-test-num* (cons (+ *error-count* *passed-count*) *error-test-num*)))
+            (push (+ *error-count* *passed-count*) *error-test-num*))
         (if (= *debug-mode* 1) 
             (progn
               (format t "OK! (t expected. got ~a)" v)
@@ -43,7 +41,7 @@
               (print v2)
               (format t "expected---~%")
               (incf *error-count*)
-              (setq *error-test-num* (cons (+ *error-count* *passed-count*))))))
+              (push (+ *error-count* *passed-count*) *error-test-num*))))
 
 
 ;;; vが"'some text here'"という形の文字列になっているか判定。nilならErrorを出力する。
@@ -173,6 +171,9 @@
 (assert-nest-str (python-like-string-from-obj murabitoA))
 
 
+; propertied-object
+(assert-equal (python-like-string-from-obj (make-instance propertied-object :plist '((1 . 100) (2 . 200)))) "[[1,100],[2,200]]")
+
 ; list
 (assert-equal (python-like-string-from-obj '(1 2 3 4)) "[1,2,3,4]")
 (assert-equal (python-like-string-from-obj '(1.0 2.0 3.0 4.0)) "[1.0,2.0,3.0,4.0]")
@@ -272,6 +273,18 @@
 (assert-equal (make-proxy #i(1 2 3)) (format nil "'proxy:[~A,\\\'USER\\\',\\\'integer-vector\\\']'" (send *ffi-symbols* :get-symbol-count)))
 (assert-equal (make-proxy #f(1 2 3)) (format nil "'proxy:[~A,\\\'USER\\\',\\\'float-vector\\\']'" (send *ffi-symbols* :get-symbol-count)))
 (assert-equal (make-proxy '(1 2 3)) (format nil "'proxy:[~A,\\\'USER\\\',\\\'cons\\\']'" (send *ffi-symbols* :get-symbol-count)))
+
+
+
+;; check-proper-dimention関数のテスト
+(assert-equal (check-proper-dimention nil '(1 2 3) ) '(3))
+(assert-equal (check-proper-dimention nil '((1 2 3) (4 5 6) (7 8 9)) ) '(3 3))
+(assert-equal (check-proper-dimention nil '(1 2 (3)) ) '(3))
+(assert-equal (check-proper-dimention nil '((1) (2) 3) ) '(3))
+(assert-equal (check-proper-dimention nil '((1) (2) (3)) ) '(3 1))
+(assert-equal (check-proper-dimention nil '((1 2) (3 4 5)) ) '(2 3))
+(assert-equal (check-proper-dimention nil '(((1) (2) (3)) ((4) (5) (6))) ) '(2 3 1))
+
 
 
 
