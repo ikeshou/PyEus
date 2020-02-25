@@ -1,7 +1,7 @@
 <!-- ctrl+shift+v to see preview,  ctrl+shift+i to arrange tables in VS Code-->
 
 # PyEus
-Python library that builds Foreign Function Interface (what is called [FFI](https://en.wikipedia.org/wiki/Foreign_function_interface)) between [Python](https://www.python.org/) and [Euslisp](https://github.com/euslisp/EusLisp).
+Python library that builds Foreign Function Interface (what is called [FFI](https://en.wikipedia.org/wiki/Foreign_function_interface) between [Python](https://www.python.org/) and [Euslisp](https://github.com/euslisp/EusLisp).
 <br>
 <br>
 
@@ -18,9 +18,9 @@ PyEus supports Python 2.7 and EusLisp 9.26 (1.2.1). (After Euslisp supports ROS2
 
 ## :warning: Caution
 ***
-Since the library of this version is an experimental one, please be sure that the whole architecture of the library might be changed.  
-Moreover, the way of bootstrapping has not yet refined :)
-If you just want to see how it works or just want to try my library, please move on to the next step! If you want to see the explanation of each file in the directory first, go to the [Description of each file](#description_of_each_file) section.
+Since the library is still an experimental one, please be sure that the whole architecture of the library might be changed. Moreover, it has not yet packaged :)
+
+If you just want to see how it works or just want to try it, please move on to the next step! If you want to see the explanation of each file in the directory first, go to the [Description of each file](#description_of_each_file) section.
 <br>
 <br>
 
@@ -391,7 +391,7 @@ The following is the integration files.
 
 ## Notes
 ***
-This folder is migrated from ikeshou/CSG_research repository (private, for resarch use).
+This folder is migrated from ikeshou/CSG_research repository (private, for research use).
 Do not worry about the small number of commitment!
 <br>
 Now implementing: 
