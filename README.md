@@ -1,7 +1,7 @@
 <!-- ctrl+shift+v to see preview,  ctrl+shift+i to arrange tables in VS Code-->
 
 # PyEus
-Python library that builds Foreign Function Interface between [Python](https://www.python.org/) and [Euslisp](https://github.com/euslisp/EusLisp).
+Python library that builds Foreign Function Interface (what is called [FFI](https://en.wikipedia.org/wiki/Foreign_function_interface)) between [Python](https://www.python.org/) and [Euslisp](https://github.com/euslisp/EusLisp).
 <br>
 <br>
 
@@ -14,7 +14,7 @@ Ikezaki Shoya <ikezaki@csg.ci.i.u-tokyo.ac.jp>
 ***
 PyEus supports Linux only.  Though you can probably use PyEus library on your Mac OS X, it is not supported.
 
-PyEus supports Python 2.7 and EusLisp 9.26( 1.2.1). (After Euslisp supports ROS2, Python 3.7 will also be supported.)
+PyEus supports Python 2.7 and EusLisp 9.26 (1.2.1). (After Euslisp supports ROS2, Python 3.7 will also be supported.)
 
 ## :warning: Caution
 ***
@@ -376,7 +376,7 @@ TEST.sum_of_0_0_element([[17,18],[19,20]], [[21,22],[23,24]])    # 38
 - `eus_server.l`: core program of the Python/Euslisp FFI
 - `pyeus_util.py`: helper functions for `pyeus.py`
 - `bugfixed_hash.l`: bug fixed hash-table for Euslisp
-- `inference_eusfunc.l`: type inference system for Euslisp functions (See [Type description interface](#type_description_interface) and [type inference system](#type_inference_sytem).)
+- `inference_eusfunc.l`: type inference system for Euslisp functions (See [Type description interface](#type_description_interface) and [type inference system](#type_inference_system).)
 
 The followings are the unit test files. (For Python codes, doctest is written in `pyeus.py` and `pyeus_util.py`.)
 
