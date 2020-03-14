@@ -84,7 +84,7 @@ For example,
 ```lisp
 ;; suppose you want to use a ~~strange~~ Euslisp function below
 (defun complicated~func (num1, num2, num3, &key param name)
-  (if (string= s "py")
+  (if (string= name "py")
       (+ num1 num2 num3 param)))
 ```
 ```python
